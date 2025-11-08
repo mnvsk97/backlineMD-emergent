@@ -34,6 +34,11 @@ const ChatSidebar = ({ isOpen, onToggle }) => {
     }
   }, [location.pathname]);
 
+  const handleQuestionClick = (question) => {
+    // For now, just log the question - can be enhanced later
+    console.log('Question clicked:', question);
+  };
+
   if (!isOpen) {
     return (
       <button
