@@ -114,10 +114,11 @@ async def init_mock_data():
             "phone": "+14159050147",
             "age": 34,
             "gender": "Male",
-            "status": "processing",
+            "status": "Insurance Verification",
             "flagged_items": 1,
             "tasks_count": 1,
             "appointments_count": 7,
+            "profile_image": "https://i.pravatar.cc/150?img=12",
             "created_at": datetime.now(timezone.utc).isoformat()
         },
         {
@@ -128,10 +129,11 @@ async def init_mock_data():
             "phone": "+14155552222",
             "age": 32,
             "gender": "Female",
-            "status": "review",
+            "status": "Document Review",
             "flagged_items": 2,
             "tasks_count": 2,
             "appointments_count": 3,
+            "profile_image": "https://i.pravatar.cc/150?img=45",
             "created_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
         },
         {
@@ -142,10 +144,11 @@ async def init_mock_data():
             "phone": "+14155553333",
             "age": 38,
             "gender": "Male",
-            "status": "approved",
+            "status": "Ready for Treatment",
             "flagged_items": 0,
             "tasks_count": 0,
             "appointments_count": 1,
+            "profile_image": "https://i.pravatar.cc/150?img=33",
             "created_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         }
     ]
