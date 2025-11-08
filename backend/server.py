@@ -458,6 +458,20 @@ async def startup_event():
     await init_mock_data()
     logger.info("BacklineMD API started successfully")
 
+# CopilotKit endpoint (placeholder for future LangGraph integration)
+@api_router.post("/copilot")
+async def copilot_endpoint(request: dict):
+    """
+    CopilotKit endpoint - ready for LangGraph agent integration
+    This will be connected to LangGraph platform agents later
+    """
+    # For now, return a simple response
+    # Later this will invoke LangGraph agents via API
+    return {
+        "status": "ready",
+        "message": "CopilotKit endpoint ready for LangGraph integration"
+    }
+
 @app.on_event("shutdown")
 async def shutdown_event():
     client.close()
