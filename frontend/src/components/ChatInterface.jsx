@@ -196,14 +196,14 @@ const ChatInterface = ({ onBack }) => {
             <div key={message.id}>
               {message.type === 'user' ? (
                 <div className="flex justify-end">
-                  <div className="bg-blue-600 text-white rounded-2xl rounded-tr-sm px-6 py-3 max-w-2xl">
+                  <div className="bg-gray-900 text-white rounded-2xl rounded-tr-sm px-6 py-3 max-w-2xl">
                     <p className="text-sm">{message.content}</p>
                   </div>
                 </div>
               ) : (
                 <div className="flex justify-start">
                   <div className="max-w-3xl w-full">
-                    <div className="bg-white rounded-2xl rounded-tl-sm px-6 py-4 shadow-sm border border-gray-200">
+                    <div className="bg-gray-50 rounded-2xl rounded-tl-sm px-6 py-4 border border-gray-200">
                       <p className="text-sm text-gray-900 whitespace-pre-line">{message.content}</p>
                     </div>
 
