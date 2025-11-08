@@ -234,7 +234,7 @@ const ChatInterface = ({ onBack }) => {
 
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-white rounded-2xl rounded-tl-sm px-6 py-4 shadow-sm border border-gray-200">
+              <div className="bg-gray-50 rounded-2xl rounded-tl-sm px-6 py-4 border border-gray-200">
                 <div className="flex items-center gap-2 text-gray-600">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span className="text-sm">Thinking...</span>
