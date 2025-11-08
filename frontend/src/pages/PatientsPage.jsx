@@ -73,9 +73,17 @@ const PatientsPage = () => {
                   data-testid={`patient-card-${patient.patient_id}`}
                 >
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <User className="w-6 h-6 text-gray-600" />
-                    </div>
+                    {patient.profile_image ? (
+                      <img
+                        src={patient.profile_image}
+                        alt={`${patient.first_name} ${patient.last_name}`}
+                        className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold text-gray-600">
+                        {patient.first_name[0]}{patient.last_name[0]}
+                      </div>
+                    )}
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-2">
