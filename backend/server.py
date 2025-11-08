@@ -461,6 +461,29 @@ async def startup_event():
     await init_mock_data()
     logger.info("BacklineMD API started successfully")
 
+# Patient Notes
+class NoteCreate(BaseModel):
+    patient_id: str
+    content: str
+    author: str = "Dr. James O'Brien"
+
+@api_router.post("/patients/{patient_id}/notes")
+async def create_note(patient_id: str, note_data: NoteCreate):
+    note = {
+        "note_id": f"NOTE-{uuid.uuid4().hex[:8].upper()}",
+        "patient_id": patient_id,
+        "content": note_data.content,
+        "author": note_data.author,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notes.insert_one(note)
+    return {"status": "success", "note": note}
+
+@api_router.get("/patients/{patient_id}/notes")
+async def get_patient_notes(patient_id: str):
+    notes = await db.notes.find({"patient_id": patient_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return notes
+
 # CopilotKit endpoint (placeholder for future LangGraph integration)
 @api_router.post("/copilot")
 async def copilot_endpoint(request: dict):
