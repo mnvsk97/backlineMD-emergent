@@ -10,7 +10,7 @@ const Layout = () => {
 
   const isActive = (path) => {
     if (path === '/patients') {
-      return location.pathname === '/' || location.pathname.startsWith('/patients');
+      return location.pathname.startsWith('/patients');
     }
     return location.pathname === path;
   };
