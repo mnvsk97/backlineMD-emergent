@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Minimize2, Maximize2 } from 'lucide-react';
-import { CopilotChat } from '@copilotkit/react-ui';
-import '@copilotkit/react-ui/styles.css';
+import { Minimize2, Maximize2, Send, Loader2 } from 'lucide-react';
+import { Textarea } from './ui/textarea';
 
 const ChatSidebar = ({ isOpen, onToggle }) => {
   const location = useLocation();
