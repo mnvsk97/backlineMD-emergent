@@ -77,14 +77,7 @@ const ChatSidebar = ({ isOpen, onToggle }) => {
               <button
                 key={index}
                 className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors text-gray-700 border border-gray-200"
-                onClick={() => {
-                  // CopilotKit will handle this
-                  const input = document.querySelector('.copilotkit-chat-input textarea');
-                  if (input) {
-                    input.value = question;
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                  }
-                }}
+                onClick={() => handleQuestionClick(question)}
               >
                 {question}
               </button>
@@ -93,16 +86,30 @@ const ChatSidebar = ({ isOpen, onToggle }) => {
         </div>
       )}
 
-      {/* CopilotKit Chat */}
-      <div className="flex-1 overflow-hidden">
-        <CopilotChat
-          className="h-full"
-          instructions="You are a helpful medical assistant for BacklineMD. Help doctors manage patients, review tasks, schedule appointments, and provide insights. Be concise and professional."
-          labels={{
-            title: "BacklineMD Assistant",
-            initial: "Hi! I'm here to help you manage patients and workflows. What can I assist you with?"
-          }}
-        />
+      {/* Chat Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex justify-start">
+          <div className="bg-gray-50 rounded-2xl rounded-tl-sm px-4 py-2 max-w-[85%] border border-gray-200">
+            <p className="text-sm text-gray-900">Hi! I'm here to help you with BacklineMD. Ask me anything about patients, tasks, or use the suggested questions above.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-gray-200 p-4 bg-gray-50">
+        <div className="flex items-end gap-2">
+          <Textarea
+            placeholder="Ask about patients, schedule appointments..."
+            className="flex-1 resize-none min-h-[60px] text-sm"
+            data-testid="chat-sidebar-input"
+          />
+          <button
+            className="p-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            data-testid="chat-sidebar-send"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
