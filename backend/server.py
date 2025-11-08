@@ -36,7 +36,8 @@ class Patient(BaseModel):
     phone: str
     age: Optional[int] = None
     gender: Optional[str] = None
-    status: Literal["intake", "processing", "review", "approved", "scheduled"] = "intake"
+    status: str = "Intake"
+    profile_image: Optional[str] = None
     flagged_items: int = 0
     tasks_count: int = 0
     appointments_count: int = 0
