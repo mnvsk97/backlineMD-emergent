@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Activity, Calendar, User, Clock, AlertCircle } from 'lucide-react';
+import { Search, Activity, Calendar, User, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Card } from '../components/ui/card';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
