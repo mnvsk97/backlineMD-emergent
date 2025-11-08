@@ -358,28 +358,28 @@ const TaskApprovalCard = ({ task, onApprove }) => {
       {/* Decision Form */}
       <div className="space-y-4">
         <RadioGroup value={decision} onValueChange={setDecision}>
-          <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-green-400 transition-colors">
+          <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-gray-900 transition-colors">
             <RadioGroupItem value="approve" id={`approve-${task.task_id}`} />
             <Label htmlFor={`approve-${task.task_id}`} className="flex-1 cursor-pointer">
               <span className="font-medium text-gray-900">Approve</span>
             </Label>
-            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            <CheckCircle2 className="w-5 h-5 text-gray-900" />
           </div>
 
-          <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-orange-400 transition-colors">
+          <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-gray-900 transition-colors">
             <RadioGroupItem value="approve_with_followup" id={`followup-${task.task_id}`} />
             <Label htmlFor={`followup-${task.task_id}`} className="flex-1 cursor-pointer">
               <span className="font-medium text-gray-900">Approve with Follow-up</span>
             </Label>
-            <AlertTriangle className="w-5 h-5 text-orange-600" />
+            <AlertTriangle className="w-5 h-5 text-gray-900" />
           </div>
 
-          <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-red-400 transition-colors">
+          <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border-2 border-gray-200 hover:border-gray-900 transition-colors">
             <RadioGroupItem value="reject" id={`reject-${task.task_id}`} />
             <Label htmlFor={`reject-${task.task_id}`} className="flex-1 cursor-pointer">
               <span className="font-medium text-gray-900">Reject</span>
             </Label>
-            <XCircle className="w-5 h-5 text-red-600" />
+            <XCircle className="w-5 h-5 text-gray-900" />
           </div>
         </RadioGroup>
 
@@ -393,7 +393,7 @@ const TaskApprovalCard = ({ task, onApprove }) => {
         <button
           onClick={handleSubmit}
           disabled={!decision || submitting}
-          className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           data-testid="submit-approval"
         >
           {submitting ? (
