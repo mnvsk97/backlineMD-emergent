@@ -7,6 +7,11 @@ const ChatSidebar = ({ isOpen, onToggle }) => {
   const location = useLocation();
   const [suggestedQuestions, setSuggestedQuestions] = useState([]);
 
+  const handleQuestionClick = (question) => {
+    console.log('Question clicked:', question);
+    // Can be enhanced to populate chat input or trigger AI response
+  };
+
   useEffect(() => {
     // Set suggested questions based on current page
     const patientMatch = location.pathname.match(/\/patients\/(.+)/);
