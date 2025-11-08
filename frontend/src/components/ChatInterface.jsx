@@ -305,17 +305,17 @@ const TaskApprovalCard = ({ task, onApprove }) => {
   };
 
   return (
-    <Card className="p-6 border-2 border-orange-200 bg-orange-50/30" data-testid={`task-approval-${task.task_id}`}>
+    <Card className="p-6 border-2 border-gray-200 bg-gray-50" data-testid={`task-approval-${task.task_id}`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-5 h-5 text-orange-600" />
+            <AlertTriangle className="w-5 h-5 text-gray-900" />
             <h3 className="font-bold text-gray-900">Needs Your Approval</h3>
           </div>
           <p className="text-sm text-gray-600">{task.patient_name} • {task.agent_type.replace('_', ' ')}</p>
         </div>
-        <div className={`px-3 py-1 rounded-full text-sm font-medium ${getConfidenceColor(task.confidence_score)}`}>
+        <div className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
           {Math.round(task.confidence_score * 100)}% confidence
         </div>
       </div>
