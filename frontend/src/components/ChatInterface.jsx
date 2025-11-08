@@ -413,10 +413,10 @@ const TaskApprovalCard = ({ task, onApprove }) => {
 // Patient Info Card Component (Mock)
 const PatientInfoCard = () => {
   return (
-    <Card className="p-6 bg-blue-50/50 border-2 border-blue-200">
+    <Card className="p-6 bg-gray-50 border-2 border-gray-200">
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-          <User className="w-6 h-6 text-blue-600" />
+        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+          <User className="w-6 h-6 text-gray-600" />
         </div>
         <div className="flex-1">
           <h3 className="font-bold text-gray-900 mb-1">Emma Watson</h3>
@@ -433,7 +433,7 @@ const PatientInfoCard = () => {
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-blue-200">
+          <div className="mt-4 pt-4 border-t border-gray-200">
             <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Recent Activity</p>
             <ul className="space-y-1 text-sm text-gray-700">
               <li>• Documents uploaded (2 hours ago)</li>
