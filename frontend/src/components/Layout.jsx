@@ -20,7 +20,7 @@ const Layout = () => {
       {/* Dark Sidebar */}
       <div className="w-20 bg-gray-950 flex flex-col items-center py-8 space-y-8">
         <button 
-          onClick={() => navigate('/patients')}
+          onClick={() => navigate('/')}
           className="w-10 h-10 bg-white rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer"
           title="Home"
           data-testid="home-logo"
