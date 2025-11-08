@@ -1,7 +1,10 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { CopilotKit } from '@copilotkit/react-core';
-import Dashboard from './pages/Dashboard';
+import Layout from './components/Layout';
+import PatientsPage from './pages/PatientsPage';
+import PatientDetailsPage from './pages/PatientDetailsPage';
+import TasksPage from './pages/TasksPage';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
@@ -13,7 +16,12 @@ function App() {
       <div className="App">
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Layout />}>
+              <Route index element={<PatientsPage />} />
+              <Route path="patients" element={<PatientsPage />} />
+              <Route path="patients/:patientId" element={<PatientDetailsPage />} />
+              <Route path="tasks" element={<TasksPage />} />
+            </Route>
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" richColors />
