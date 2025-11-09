@@ -4,10 +4,11 @@ Run with: python seed_data.py
 """
 
 import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime, timedelta
 import random
+from datetime import datetime, timedelta
 from uuid import uuid4
+
+from motor.motor_asyncio import AsyncIOMotorClient
 
 MONGO_URL = "mongodb://localhost:27017"
 DEFAULT_TENANT = "hackathon-demo"
@@ -23,7 +24,7 @@ PATIENTS = [
         "email": "alex.rodriguez@email.com",
         "phone": "+1-555-0101",
         "preconditions": ["Family history of heart disease", "Elevated cholesterol"],
-        "profile_image": "https://i.pravatar.cc/150?img=12"
+        "profile_image": "https://i.pravatar.cc/150?img=12",
     },
     {
         "first_name": "Maria",
@@ -34,7 +35,7 @@ PATIENTS = [
         "email": "maria.garcia@email.com",
         "phone": "+1-555-0102",
         "preconditions": ["Diabetes Type 2", "Hypertension"],
-        "profile_image": "https://i.pravatar.cc/150?img=45"
+        "profile_image": "https://i.pravatar.cc/150?img=45",
     },
     {
         "first_name": "James",
@@ -45,7 +46,7 @@ PATIENTS = [
         "email": "james.smith@email.com",
         "phone": "+1-555-0103",
         "preconditions": ["Hypertension", "Sleep apnea"],
-        "profile_image": "https://i.pravatar.cc/150?img=33"
+        "profile_image": "https://i.pravatar.cc/150?img=33",
     },
     {
         "first_name": "Sarah",
@@ -56,7 +57,7 @@ PATIENTS = [
         "email": "sarah.chen@email.com",
         "phone": "+1-555-0104",
         "preconditions": ["Asthma", "Allergies"],
-        "profile_image": "https://i.pravatar.cc/150?img=23"
+        "profile_image": "https://i.pravatar.cc/150?img=23",
     },
     {
         "first_name": "Michael",
@@ -67,7 +68,7 @@ PATIENTS = [
         "email": "michael.johnson@email.com",
         "phone": "+1-555-0105",
         "preconditions": ["Obesity", "Pre-diabetes", "High blood pressure"],
-        "profile_image": "https://i.pravatar.cc/150?img=52"
+        "profile_image": "https://i.pravatar.cc/150?img=52",
     },
     {
         "first_name": "Emily",
@@ -78,7 +79,7 @@ PATIENTS = [
         "email": "emily.davis@email.com",
         "phone": "+1-555-0106",
         "preconditions": ["Anxiety disorder", "Hypothyroidism"],
-        "profile_image": "https://i.pravatar.cc/150?img=38"
+        "profile_image": "https://i.pravatar.cc/150?img=38",
     },
     {
         "first_name": "Robert",
@@ -89,7 +90,7 @@ PATIENTS = [
         "email": "robert.williams@email.com",
         "phone": "+1-555-0107",
         "preconditions": ["Coronary artery disease", "Type 2 diabetes", "Arthritis"],
-        "profile_image": "https://i.pravatar.cc/150?img=60"
+        "profile_image": "https://i.pravatar.cc/150?img=60",
     },
     {
         "first_name": "Jennifer",
@@ -100,61 +101,57 @@ PATIENTS = [
         "email": "jennifer.martinez@email.com",
         "phone": "+1-555-0108",
         "preconditions": ["Migraine", "GERD"],
-        "profile_image": "https://i.pravatar.cc/150?img=47"
-    }
+        "profile_image": "https://i.pravatar.cc/150?img=47",
+    },
 ]
 
 FORM_TEMPLATES = [
     {
         "name": "Insurance Information Release",
         "description": "Authorization to release medical information to insurance provider",
-        "purpose": "Insurance verification and claims processing"
+        "purpose": "Insurance verification and claims processing",
     },
     {
         "name": "Medical Records Request",
         "description": "Authorization to request medical records from external providers",
-        "purpose": "Obtain complete medical history"
-    }
+        "purpose": "Obtain complete medical history",
+    },
 ]
 
 DOCUMENTS = [
     {
         "kind": "lab",
         "file_name": "Blood Test Results - Oct 2024.pdf",
-        "status": "ingested"
+        "status": "uploaded",
     },
     {
         "kind": "imaging",
         "file_name": "X-Ray Chest - Sep 2024.pdf",
-        "status": "ingested"
+        "status": "uploaded",
     },
     {
         "kind": "medical_history",
         "file_name": "Medical History Summary.pdf",
-        "status": "not_ingested"
+        "status": "uploaded",
     },
-    {
-        "kind": "lab",
-        "file_name": "A1C Test Results.pdf",
-        "status": "ingested"
-    }
+    {"kind": "lab", "file_name": "A1C Test Results.pdf", "status": "uploaded"},
 ]
 
 
 def generate_ngrams(text: str, n: int = 3):
     """Generate n-grams for search"""
     text = text.lower().replace(" ", "")
-    return [text[i:i+n] for i in range(len(text) - n + 1)]
+    return [text[i : i + n] for i in range(len(text) - n + 1)]
 
 
 async def seed_database():
     client = AsyncIOMotorClient(MONGO_URL)
     db = client.backlinemd
-    
+
     print("🌱 Starting seed data creation...")
     print(f"   Tenant: {DEFAULT_TENANT}")
     print("")
-    
+
     # Clear existing data
     print("🗑️  Clearing existing data...")
     await db.patients.delete_many({"tenant_id": DEFAULT_TENANT})
@@ -167,25 +164,27 @@ async def seed_database():
     await db.form_templates.delete_many({"tenant_id": DEFAULT_TENANT})
     print("   ✓ Cleared")
     print("")
-    
+
     # Create form templates
     print("📋 Creating form templates...")
     template_ids = []
     for template in FORM_TEMPLATES:
         template_id = str(uuid4())
-        await db.form_templates.insert_one({
-            "_id": template_id,
-            "tenant_id": DEFAULT_TENANT,
-            **template,
-            "template_url": f"/templates/{template_id}.pdf",
-            "is_active": True,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
-        })
+        await db.form_templates.insert_one(
+            {
+                "_id": template_id,
+                "tenant_id": DEFAULT_TENANT,
+                **template,
+                "template_url": f"/templates/{template_id}.pdf",
+                "is_active": True,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+        )
         template_ids.append(template_id)
         print(f"   ✓ {template['name']}")
     print("")
-    
+
     # Create patients
     print("👥 Creating patients...")
     patient_ids = []
@@ -194,7 +193,7 @@ async def seed_database():
         mrn = f"MRN{random.randint(100000, 999999)}"
         full_name = f"{patient_data['first_name']} {patient_data['last_name']}"
         ngrams = generate_ngrams(full_name)
-        
+
         patient = {
             "_id": patient_id,
             "tenant_id": DEFAULT_TENANT,
@@ -207,26 +206,34 @@ async def seed_database():
             "contact": {
                 "email": patient_data["email"],
                 "phone": patient_data["phone"],
-                "address": {}
+                "address": {},
             },
             "preconditions": patient_data["preconditions"],
             "flags": [],
             "latest_vitals": {},
             "profile_image": patient_data["profile_image"],
-            "status": "Active",
+            "status": random.choice([
+                "Intake In Progress",
+                "Intake Done",
+                "Doc Collection In Progress",
+                "Consultation Scheduled",
+                "Review Done"
+            ]),
             "tasks_count": 0,
             "appointments_count": 0,
             "flagged_count": 0,
             "search": {"ngrams": ngrams},
             "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
-        
+
         await db.patients.insert_one(patient)
         patient_ids.append((patient_id, full_name))
-        print(f"   ✓ {full_name} (Age: {patient_data['age']}, {patient_data['gender']})")
+        print(
+            f"   ✓ {full_name} (Age: {patient_data['age']}, {patient_data['gender']})"
+        )
     print("")
-    
+
     # Create documents for first 3 patients
     print("📄 Creating documents...")
     doc_count = 0
@@ -244,26 +251,28 @@ async def seed_database():
                     "name": doc_template["file_name"],
                     "mime": "application/pdf",
                     "size": random.randint(100000, 500000),
-                    "sha256": f"hash-{document_id[:8]}"
+                    "sha256": f"hash-{document_id[:8]}",
                 },
                 "ocr": {"done": True, "engine": "tesseract"},
                 "extracted": {
                     "fields": {
-                        "test_type": "Blood Panel" if doc_template["kind"] == "lab" else "X-Ray",
+                        "test_type": (
+                            "Blood Panel" if doc_template["kind"] == "lab" else "X-Ray"
+                        ),
                         "date": "2024-10-15",
-                        "result": "Normal"
+                        "result": "Normal",
                     },
-                    "confidence": 0.92 if doc_template["status"] == "ingested" else 0.85
+                    "confidence": 0.92,
                 },
                 "status": doc_template["status"],
                 "created_at": datetime.utcnow() - timedelta(days=random.randint(1, 30)),
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.utcnow(),
             }
             await db.documents.insert_one(doc)
             doc_count += 1
     print(f"   ✓ Created {doc_count} documents")
     print("")
-    
+
     # Create consent forms
     print("📝 Creating consent forms...")
     form_statuses = ["to_do", "sent", "signed"]
@@ -272,7 +281,7 @@ async def seed_database():
         for j, template_id in enumerate(template_ids):
             template = FORM_TEMPLATES[j]
             status = form_statuses[i % 3]
-            
+
             form_data = {
                 "_id": str(uuid4()),
                 "tenant_id": DEFAULT_TENANT,
@@ -283,25 +292,29 @@ async def seed_database():
                 "purpose": template["purpose"],
                 "status": status,
                 "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.utcnow(),
             }
-            
+
             if status in ["sent", "signed"]:
-                form_data["sent_date"] = datetime.utcnow() - timedelta(days=random.randint(1, 10))
-            
+                form_data["sent_date"] = datetime.utcnow() - timedelta(
+                    days=random.randint(1, 10)
+                )
+
             if status == "signed":
-                form_data["signed_date"] = datetime.utcnow() - timedelta(days=random.randint(1, 5))
+                form_data["signed_date"] = datetime.utcnow() - timedelta(
+                    days=random.randint(1, 5)
+                )
                 form_data["docusign"] = {
                     "envelope_id": f"env-{str(uuid4())[:8]}",
                     "status": "completed",
-                    "signed_document_url": f"/signed/{form_data['_id']}.pdf"
+                    "signed_document_url": f"/signed/{form_data['_id']}.pdf",
                 }
-            
+
             await db.consent_forms.insert_one(form_data)
             form_count += 1
     print(f"   ✓ Created {form_count} consent forms")
     print("")
-    
+
     # Create tasks
     print("✅ Creating tasks...")
     for i in range(3):
@@ -324,19 +337,19 @@ async def seed_database():
             "confidence_score": random.uniform(0.85, 0.92),
             "waiting_minutes": random.randint(10, 120),
             "created_at": datetime.utcnow() - timedelta(hours=random.randint(1, 48)),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
         await db.tasks.insert_one(task)
         await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
     print(f"   ✓ Created 3 tasks")
     print("")
-    
+
     # Create appointments
     print("📅 Creating appointments...")
     for i in range(4):
         patient_id, patient_name = patient_ids[i]
         apt_id = str(uuid4())
-        starts_at = datetime.utcnow() + timedelta(hours=2 + i*2)
+        starts_at = datetime.utcnow() + timedelta(hours=2 + i * 2)
         appointment = {
             "_id": apt_id,
             "tenant_id": DEFAULT_TENANT,
@@ -350,16 +363,18 @@ async def seed_database():
             "status": "scheduled",
             "google_calendar": {
                 "event_id": f"gcal-{apt_id[:8]}",
-                "calendar_id": "primary"
+                "calendar_id": "primary",
             },
             "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
         await db.appointments.insert_one(appointment)
-        await db.patients.update_one({"_id": patient_id}, {"$inc": {"appointments_count": 1}})
+        await db.patients.update_one(
+            {"_id": patient_id}, {"$inc": {"appointments_count": 1}}
+        )
     print(f"   ✓ Created 4 appointments")
     print("")
-    
+
     # Create claims
     print("💰 Creating insurance claims...")
     insurance_providers = ["Blue Shield", "Aetna", "UnitedHealthcare", "Cigna"]
@@ -368,7 +383,7 @@ async def seed_database():
         claim_id = str(uuid4())
         claim_id_display = f"C{random.randint(10000, 99999)}"
         amount = random.choice([1500, 2500, 3500, 4200])
-        
+
         claim = {
             "_id": claim_id,
             "claim_id": claim_id_display,
@@ -380,16 +395,26 @@ async def seed_database():
             "amount_display": amount,
             "procedure_code": f"99{random.randint(213, 215)}",
             "diagnosis_code": random.choice(["Z00.00", "E11.9", "I10"]),
-            "service_date": (datetime.utcnow() - timedelta(days=random.randint(5, 30))).strftime("%Y-%m-%d"),
-            "submitted_date": (datetime.utcnow() - timedelta(days=random.randint(1, 15))).strftime("%Y-%m-%d"),
+            "service_date": (
+                datetime.utcnow() - timedelta(days=random.randint(5, 30))
+            ).strftime("%Y-%m-%d"),
+            "submitted_date": (
+                datetime.utcnow() - timedelta(days=random.randint(1, 15))
+            ).strftime("%Y-%m-%d"),
             "description": "Medical consultation with diagnostic tests",
-            "status": random.choice(["pending", "pending", "approved", "denied"]),
+            "status": random.choice([
+                "pending",
+                "submitted",
+                "under_review",
+                "approved",
+                "settlement_in_progress"
+            ]),
             "last_event_at": datetime.utcnow(),
             "created_at": datetime.utcnow() - timedelta(days=random.randint(1, 20)),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
         await db.claims.insert_one(claim)
-        
+
         # Create claim event
         event = {
             "_id": str(uuid4()),
@@ -399,14 +424,14 @@ async def seed_database():
             "description": f"Claim submitted to {claim['insurance_provider']} for ${amount:.2f}",
             "at": claim["created_at"],
             "time": claim["created_at"].strftime("%I:%M %p"),
-            "created_at": claim["created_at"]
+            "created_at": claim["created_at"],
         }
         await db.claim_events.insert_one(event)
     print(f"   ✓ Created 4 claims with events")
     print("")
-    
+
     client.close()
-    
+
     print("✅ Seed data creation complete!")
     print("")
     print("Summary:")
@@ -418,6 +443,7 @@ async def seed_database():
     print(f"   - 4 appointments")
     print(f"   - 4 claims")
     print("")
+
 
 if __name__ == "__main__":
     asyncio.run(seed_database())

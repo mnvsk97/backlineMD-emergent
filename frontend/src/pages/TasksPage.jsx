@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Clock, User, AlertTriangle, CheckCircle, XCircle, Plus } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
 import CreateTaskModal from '../components/CreateTaskModal';
+import sseClient from '../services/sse';
+import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -16,13 +18,7 @@ const TasksPage = () => {
   const [filter, setFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  useEffect(() => {
-    fetchTasks();
-    const interval = setInterval(fetchTasks, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/tasks`);
       setTasks(response.data);
@@ -31,7 +27,34 @@ const TasksPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 30000);
+    return () => clearInterval(interval);
+  }, [fetchTasks]);
+
+  // Subscribe to task events for real-time updates
+  useEffect(() => {
+    const unsubscribe = sseClient.on('task', (event) => {
+      console.log('Task event received:', event);
+
+      // Show toast notification
+      if (event.action === 'created') {
+        toast.success(`New task: ${event.data?.title}`);
+      } else if (event.action === 'updated') {
+        toast.info(`Task updated: ${event.data?.title}`);
+      } else if (event.action === 'completed') {
+        toast.success(`Task completed: ${event.data?.title}`);
+      }
+
+      // Refresh task list
+      fetchTasks();
+    });
+
+    return () => unsubscribe();
+  }, [fetchTasks]);
 
   // Provide all tasks context to CopilotKit
   useCopilotContext({

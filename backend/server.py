@@ -1,25 +1,38 @@
-from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, File, UploadFile, Header
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from dotenv import load_dotenv
-from pathlib import Path
-from typing import Optional, List
-import os
-import uuid
-import random
 import asyncio
 import json
+import random
+import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import List, Optional
+
+from dotenv import load_dotenv
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer
 
 # Load environment
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
 # Import our modules
-from database import connect_db, close_db, get_db
+from database import close_db, connect_db, get_db
+from logger import get_logger
 from models import *
-from auth import create_access_token, decode_token, get_password_hash, verify_password
-from websocket_manager import manager
+
+# Event queue for SSE
+import queue
+event_queues = {}
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Create FastAPI app
 app = FastAPI(title="BacklineMD API", version="1.0.0")
@@ -36,100 +49,115 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
+
 # Startup/Shutdown
 @app.on_event("startup")
 async def startup_event():
     await connect_db()
     print("\u2713 BacklineMD API started")
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
     await close_db()
     print("\u2713 BacklineMD API stopped")
+
 
 # ==================== NO AUTH - HACKATHON MODE ====================
 
 # Default tenant for hackathon
 DEFAULT_TENANT = "hackathon-demo"
 
+
 async def get_current_user():
     """No auth required for hackathon"""
     return {
         "user_id": "demo-user",
         "tenant_id": DEFAULT_TENANT,
-        "email": "demo@backlinemd.com"
+        "email": "demo@backlinemd.com",
     }
 
+
 # ==================== HELPER FUNCTIONS ====================
+
 
 def generate_ngrams(text: str, n: int = 3) -> List[str]:
     """Generate n-grams for fuzzy search"""
     text = text.lower().replace(" ", "")
-    return [text[i:i+n] for i in range(len(text) - n + 1)]
+    return [text[i : i + n] for i in range(len(text) - n + 1)]
+
 
 async def broadcast_event(tenant_id: str, event_type: str, op: str, doc: dict):
-    """Broadcast event to WebSocket connections"""
-    await manager.broadcast(tenant_id, {
-        "type": event_type,
-        "op": op,
-        "doc": doc
-    })
+    """Broadcast event to SSE subscribers"""
+    event_data = {"type": event_type, "op": op, "doc": doc}
+
+    # Add to all queues for this tenant
+    if tenant_id in event_queues:
+        for q in event_queues[tenant_id]:
+            try:
+                q.put_nowait(event_data)
+            except queue.Full:
+                pass  # Drop event if queue is full
+
 
 # ==================== NO AUTH ROUTES FOR HACKATHON ====================
 
 # ==================== PATIENT ROUTES ====================
+
 
 @app.get("/api/patients")
 async def list_patients(
     q: Optional[str] = None,
     limit: int = 20,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     query = {"tenant_id": tenant_id}
     if q:
         # Search using n-grams
         ngrams = generate_ngrams(q)
         query["search.ngrams"] = {"$in": ngrams}
-    
+
     cursor = db.patients.find(query).skip(skip).limit(limit).sort("created_at", -1)
     patients = await cursor.to_list(length=limit)
-    
+
     result = []
     for p in patients:
-        result.append({
-            "patient_id": p["_id"],
-            "first_name": p["first_name"],
-            "last_name": p["last_name"],
-            "email": p["contact"]["email"],
-            "phone": p["contact"]["phone"],
-            "status": p.get("status", "Active"),
-            "tasks_count": p.get("tasks_count", 0),
-            "appointments_count": p.get("appointments_count", 0),
-            "flagged_count": p.get("flagged_count", 0),
-            "profile_image": p.get("profile_image")
-        })
-    
+        result.append(
+            {
+                "patient_id": p["_id"],
+                "first_name": p["first_name"],
+                "last_name": p["last_name"],
+                "email": p["contact"]["email"],
+                "phone": p["contact"]["phone"],
+                "status": p.get("status", "Active"),
+                "tasks_count": p.get("tasks_count", 0),
+                "appointments_count": p.get("appointments_count", 0),
+                "flagged_count": p.get("flagged_count", 0),
+                "profile_image": p.get("profile_image"),
+            }
+        )
+
     return result
+
 
 @app.post("/api/patients")
 async def create_patient(
-    patient_data: PatientCreate,
-    current_user: dict = Depends(get_current_user)
+    patient_data: PatientCreate, current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     patient_id = str(uuid.uuid4())
     mrn = f"MRN{random.randint(100000, 999999)}"
-    
+
     # Generate search n-grams
     full_name = f"{patient_data.first_name} {patient_data.last_name}"
     ngrams = generate_ngrams(full_name)
-    
+
     patient = {
         "_id": patient_id,
         "tenant_id": tenant_id,
@@ -141,7 +169,7 @@ async def create_patient(
         "contact": {
             "email": patient_data.email,
             "phone": patient_data.phone,
-            "address": patient_data.address or {}
+            "address": patient_data.address or {},
         },
         "preconditions": patient_data.preconditions or [],
         "flags": [],
@@ -152,33 +180,30 @@ async def create_patient(
         "appointments_count": 0,
         "flagged_count": 0,
         "search": {"ngrams": ngrams},
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
-        "created_by": current_user["user_id"]
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": current_user["user_id"],
     }
-    
+
     await db.patients.insert_one(patient)
-    
+
     # Broadcast event
-    await broadcast_event(tenant_id, "patient", "insert", {
-        "patient_id": patient_id,
-        "name": full_name
-    })
-    
+    await broadcast_event(
+        tenant_id, "patient", "insert", {"patient_id": patient_id, "name": full_name}
+    )
+
     return {"patient_id": patient_id, "message": "Patient created successfully"}
 
+
 @app.get("/api/patients/{patient_id}")
-async def get_patient(
-    patient_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+async def get_patient(patient_id: str, current_user: dict = Depends(get_current_user)):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
     return {
         "patient_id": patient["_id"],
         "mrn": patient["mrn"],
@@ -196,60 +221,76 @@ async def get_patient(
         "tasks_count": patient.get("tasks_count", 0),
         "appointments_count": patient.get("appointments_count", 0),
         "flagged_count": patient.get("flagged_count", 0),
-        "age": patient.get("age", 34)
+        "age": patient.get("age", 34),
     }
+
 
 @app.get("/api/patients/{patient_id}/summary")
 async def get_patient_summary(
-    patient_id: str,
-    current_user: dict = Depends(get_current_user)
+    patient_id: str, current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     # Check if cached
-    cached = await db.ai_artifacts.find_one({
-        "tenant_id": tenant_id,
-        "kind": "patient_summary",
-        "subject.patient_id": patient_id
-    })
-    
-    if cached and cached.get("expires_at") > datetime.utcnow():
+    cached = await db.ai_artifacts.find_one(
+        {
+            "tenant_id": tenant_id,
+            "kind": "patient_summary",
+            "subject.patient_id": patient_id,
+        }
+    )
+
+    if cached and cached.get("expires_at") > datetime.now(timezone.utc):
         return cached["payload"]
-    
+
     # Generate mock summary
     patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
     summary_text = f"{patient.get('age', 34)}-year-old {patient['gender'].lower()} patient with documented {', '.join(patient.get('preconditions', ['family history of heart disease']))}. Currently under {patient.get('status', 'active').lower()}. Initial consultation completed with comprehensive medical history review. Recent vitals show stable condition. Recommended follow-up in 4-6 weeks."
-    
+
     payload = {
         "summary": summary_text,
         "citations": [
-            {"doc_id": "DOC123", "kind": "lab", "page": 2, "excerpt": "Cholesterol: 205 mg/dL"},
-            {"doc_id": "DOC124", "kind": "imaging", "page": 1, "excerpt": "X-Ray: No abnormalities"}
+            {
+                "doc_id": "DOC123",
+                "kind": "lab",
+                "page": 2,
+                "excerpt": "Cholesterol: 205 mg/dL",
+            },
+            {
+                "doc_id": "DOC124",
+                "kind": "imaging",
+                "page": 1,
+                "excerpt": "X-Ray: No abnormalities",
+            },
         ],
-        "generated_at": datetime.utcnow().isoformat(),
-        "model": "gpt-4"
-    }
-    
-    # Cache it
-    await db.ai_artifacts.insert_one({
-        "_id": str(uuid.uuid4()),
-        "tenant_id": tenant_id,
-        "kind": "patient_summary",
-        "subject": {"patient_id": patient_id},
-        "payload": payload,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "model": "gpt-4",
-        "score": 0.95,
-        "expires_at": datetime.utcnow() + timedelta(hours=1),
-        "created_at": datetime.utcnow()
-    })
-    
+    }
+
+    # Cache it
+    await db.ai_artifacts.insert_one(
+        {
+            "_id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "kind": "patient_summary",
+            "subject": {"patient_id": patient_id},
+            "payload": payload,
+            "model": "gpt-4",
+            "score": 0.95,
+            "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+
     return payload
 
+
 # ==================== DOCUMENT ROUTES ====================
+
 
 @app.get("/api/documents")
 async def list_documents(
@@ -258,11 +299,11 @@ async def list_documents(
     status: Optional[str] = None,
     limit: int = 50,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     query = {"tenant_id": tenant_id}
     if patient_id:
         query["patient_id"] = patient_id
@@ -270,10 +311,10 @@ async def list_documents(
         query["kind"] = kind
     if status:
         query["status"] = status
-    
+
     cursor = db.documents.find(query).skip(skip).limit(limit).sort("created_at", -1)
     documents = await cursor.to_list(length=limit)
-    
+
     return [
         {
             "document_id": doc["_id"],
@@ -282,24 +323,25 @@ async def list_documents(
             "file": doc["file"],
             "status": doc["status"],
             "extracted": doc.get("extracted"),
-            "created_at": doc["created_at"]
+            "created_at": doc["created_at"],
         }
         for doc in documents
     ]
+
 
 @app.post("/api/documents/upload")
 async def upload_document(
     patient_id: str,
     kind: str,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     # In production, upload to S3. For now, just store metadata
     document_id = str(uuid.uuid4())
-    
+
     document = {
         "_id": document_id,
         "tenant_id": tenant_id,
@@ -310,38 +352,38 @@ async def upload_document(
             "name": file.filename,
             "mime": file.content_type,
             "size": 0,  # Would be real size
-            "sha256": "mock-hash"
+            "sha256": "mock-hash",
         },
         "ocr": {"done": False, "engine": None},
         "extracted": {},
         "status": DocumentStatus.UPLOADED,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     }
-    
+
     await db.documents.insert_one(document)
-    
+
     # Trigger document extraction agent (async)
     asyncio.create_task(trigger_document_extraction(document_id, tenant_id))
-    
+
     return {
         "document_id": document_id,
         "status": DocumentStatus.UPLOADED,
-        "message": "Document uploaded successfully"
+        "message": "Document uploaded successfully",
     }
+
 
 @app.get("/api/documents/{document_id}")
 async def get_document(
-    document_id: str,
-    current_user: dict = Depends(get_current_user)
+    document_id: str, current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     document = await db.documents.find_one({"_id": document_id, "tenant_id": tenant_id})
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    
+
     return {
         "document_id": document["_id"],
         "patient_id": document["patient_id"],
@@ -349,95 +391,104 @@ async def get_document(
         "file": document["file"],
         "status": document["status"],
         "extracted": document.get("extracted"),
-        "created_at": document["created_at"]
+        "created_at": document["created_at"],
     }
+
 
 @app.patch("/api/documents/{document_id}")
 async def update_document(
     document_id: str,
     update_data: DocumentUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     update_fields = {}
     if update_data.status:
         update_fields["status"] = update_data.status
     if update_data.extracted:
         update_fields["extracted"] = update_data.extracted
-    
-    update_fields["updated_at"] = datetime.utcnow()
-    
+
+    update_fields["updated_at"] = datetime.now(timezone.utc)
+
     result = await db.documents.update_one(
-        {"_id": document_id, "tenant_id": tenant_id},
-        {"$set": update_fields}
+        {"_id": document_id, "tenant_id": tenant_id}, {"$set": update_fields}
     )
-    
+
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Document not found")
-    
+
     # Broadcast event
-    await broadcast_event(tenant_id, "document", "update", {
-        "document_id": document_id,
-        "status": update_data.status
-    })
-    
+    await broadcast_event(
+        tenant_id,
+        "document",
+        "update",
+        {"document_id": document_id, "status": update_data.status},
+    )
+
     return {"message": "Document updated successfully"}
 
+
 # ==================== MOCK AGENT FUNCTION ====================
+
 
 async def trigger_document_extraction(document_id: str, tenant_id: str):
     """Mock document extraction agent"""
     db = get_db()
-    
+
     # Wait 2 seconds
     await asyncio.sleep(2)
-    
+
     # Update status to ingesting
     await db.documents.update_one(
-        {"_id": document_id},
-        {"$set": {"status": DocumentStatus.INGESTING}}
+        {"_id": document_id}, {"$set": {"status": DocumentStatus.INGESTING}}
     )
-    
-    await broadcast_event(tenant_id, "document", "update", {
-        "document_id": document_id,
-        "status": DocumentStatus.INGESTING
-    })
-    
+
+    await broadcast_event(
+        tenant_id,
+        "document",
+        "update",
+        {"document_id": document_id, "status": DocumentStatus.INGESTING},
+    )
+
     # Wait 3 more seconds
     await asyncio.sleep(3)
-    
+
     # Simulate extraction
     confidence = random.uniform(0.75, 0.98)
-    
+
     extracted_data = {
         "blood_type": "O+",
         "cholesterol": "205 mg/dL",
         "bp": "125/80",
         "hr": 68,
-        "confidence": confidence
+        "confidence": confidence,
     }
-    
-    status = DocumentStatus.INGESTED if confidence > 0.9 else DocumentStatus.NOT_INGESTED
-    
+
+    status = (
+        DocumentStatus.INGESTED if confidence > 0.9 else DocumentStatus.NOT_INGESTED
+    )
+
     await db.documents.update_one(
         {"_id": document_id},
-        {"$set": {
-            "status": status,
-            "extracted": {
-                "fields": extracted_data,
-                "confidence": confidence,
-                "needs_review": [] if confidence > 0.9 else ["cholesterol"]
+        {
+            "$set": {
+                "status": status,
+                "extracted": {
+                    "fields": extracted_data,
+                    "confidence": confidence,
+                    "needs_review": [] if confidence > 0.9 else ["cholesterol"],
+                },
             }
-        }}
+        },
     )
-    
+
     # If low confidence, create task
     if confidence < 0.9:
         doc = await db.documents.find_one({"_id": document_id})
         patient = await db.patients.find_one({"_id": doc["patient_id"]})
-        
+
         task_id = str(uuid.uuid4())
         task = {
             "_id": task_id,
@@ -457,32 +508,37 @@ async def trigger_document_extraction(document_id: str, tenant_id: str):
             "confidence_score": confidence,
             "waiting_minutes": 0,
             "ai_resume_hook": None,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
         }
-        
+
         await db.tasks.insert_one(task)
-        
+
         # Increment patient task count
         await db.patients.update_one(
-            {"_id": doc["patient_id"]},
-            {"$inc": {"tasks_count": 1}}
+            {"_id": doc["patient_id"]}, {"$inc": {"tasks_count": 1}}
         )
-        
+
         # Broadcast task
-        await broadcast_event(tenant_id, "task", "insert", {
-            "task_id": task_id,
-            "title": task["title"],
-            "patient_name": task["patient_name"]
-        })
-    
+        await broadcast_event(
+            tenant_id,
+            "task",
+            "insert",
+            {
+                "task_id": task_id,
+                "title": task["title"],
+                "patient_name": task["patient_name"],
+            },
+        )
+
     # Broadcast document update
-    await broadcast_event(tenant_id, "document", "update", {
-        "document_id": document_id,
-        "status": status
-    })
+    await broadcast_event(
+        tenant_id, "document", "update", {"document_id": document_id, "status": status}
+    )
+
 
 # ==================== TASK ROUTES ====================
+
 
 @app.get("/api/tasks")
 async def list_tasks(
@@ -492,11 +548,11 @@ async def list_tasks(
     priority: Optional[str] = None,
     limit: int = 50,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     query = {"tenant_id": tenant_id}
     if state:
         query["state"] = state
@@ -506,10 +562,10 @@ async def list_tasks(
         query["assignee_id"] = assignee_id
     if priority:
         query["priority"] = priority
-    
+
     cursor = db.tasks.find(query).skip(skip).limit(limit).sort("created_at", -1)
     tasks = await cursor.to_list(length=limit)
-    
+
     return [
         {
             "task_id": task["task_id"],
@@ -522,24 +578,26 @@ async def list_tasks(
             "state": task["state"],
             "confidence_score": task.get("confidence_score"),
             "waiting_minutes": task.get("waiting_minutes", 0),
-            "created_at": task["created_at"]
+            "created_at": task["created_at"],
         }
         for task in tasks
     ]
 
+
 @app.post("/api/tasks")
 async def create_task(
-    task_data: TaskCreate,
-    current_user: dict = Depends(get_current_user)
+    task_data: TaskCreate, current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     # Get patient name
-    patient = await db.patients.find_one({"_id": task_data.patient_id, "tenant_id": tenant_id})
+    patient = await db.patients.find_one(
+        {"_id": task_data.patient_id, "tenant_id": tenant_id}
+    )
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
     task_id = str(uuid.uuid4())
     task = {
         "_id": task_id,
@@ -557,65 +615,66 @@ async def create_task(
         "state": TaskState.OPEN,
         "confidence_score": 1.0,
         "waiting_minutes": 0,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
-        "created_by": current_user["user_id"]
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": current_user["user_id"],
     }
-    
+
     await db.tasks.insert_one(task)
-    
+
     # Increment patient task count
     await db.patients.update_one(
-        {"_id": task_data.patient_id},
-        {"$inc": {"tasks_count": 1}}
+        {"_id": task_data.patient_id}, {"$inc": {"tasks_count": 1}}
     )
-    
+
     # Broadcast event
-    await broadcast_event(tenant_id, "task", "insert", {
-        "task_id": task_id,
-        "title": task["title"]
-    })
-    
+    await broadcast_event(
+        tenant_id, "task", "insert", {"task_id": task_id, "title": task["title"]}
+    )
+
     return {"task_id": task_id, "message": "Task created successfully"}
+
 
 @app.patch("/api/tasks/{task_id}")
 async def update_task(
     task_id: str,
     update_data: TaskUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     update_fields = {}
     if update_data.state:
         update_fields["state"] = update_data.state
     if update_data.comment:
-        update_fields["$push"] = {"comments": {
-            "user_id": current_user["user_id"],
-            "text": update_data.comment,
-            "created_at": datetime.utcnow()
-        }}
-    
-    update_fields["updated_at"] = datetime.utcnow()
-    
+        update_fields["$push"] = {
+            "comments": {
+                "user_id": current_user["user_id"],
+                "text": update_data.comment,
+                "created_at": datetime.now(timezone.utc),
+            }
+        }
+
+    update_fields["updated_at"] = datetime.now(timezone.utc)
+
     result = await db.tasks.update_one(
-        {"_id": task_id, "tenant_id": tenant_id},
-        {"$set": update_fields}
+        {"_id": task_id, "tenant_id": tenant_id}, {"$set": update_fields}
     )
-    
+
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     # Broadcast event
-    await broadcast_event(tenant_id, "task", "update", {
-        "task_id": task_id,
-        "state": update_data.state
-    })
-    
+    await broadcast_event(
+        tenant_id, "task", "update", {"task_id": task_id, "state": update_data.state}
+    )
+
     return {"message": "Task updated successfully"}
 
+
 # ==================== CLAIM ROUTES ====================
+
 
 @app.get("/api/claims")
 async def list_claims(
@@ -623,20 +682,20 @@ async def list_claims(
     patient_id: Optional[str] = None,
     limit: int = 50,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     query = {"tenant_id": tenant_id}
     if status:
         query["status"] = status
     if patient_id:
         query["patient_id"] = patient_id
-    
+
     cursor = db.claims.find(query).skip(skip).limit(limit).sort("last_event_at", -1)
     claims = await cursor.to_list(length=limit)
-    
+
     return [
         {
             "claim_id": claim["_id"],
@@ -647,27 +706,29 @@ async def list_claims(
             "amount": claim["amount_display"],
             "status": claim["status"],
             "submitted_date": claim["submitted_date"],
-            "last_event_at": claim.get("last_event_at")
+            "last_event_at": claim.get("last_event_at"),
         }
         for claim in claims
     ]
 
+
 @app.post("/api/claims")
 async def create_claim(
-    claim_data: ClaimCreate,
-    current_user: dict = Depends(get_current_user)
+    claim_data: ClaimCreate, current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     # Get patient
-    patient = await db.patients.find_one({"_id": claim_data.patient_id, "tenant_id": tenant_id})
+    patient = await db.patients.find_one(
+        {"_id": claim_data.patient_id, "tenant_id": tenant_id}
+    )
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    
+
     claim_id = str(uuid.uuid4())
     claim_id_display = f"C{random.randint(10000, 99999)}"
-    
+
     claim = {
         "_id": claim_id,
         "claim_id": claim_id_display,
@@ -680,16 +741,16 @@ async def create_claim(
         "procedure_code": claim_data.procedure_code,
         "diagnosis_code": claim_data.diagnosis_code,
         "service_date": claim_data.service_date,
-        "submitted_date": datetime.utcnow().strftime("%Y-%m-%d"),
+        "submitted_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "description": claim_data.description,
         "status": ClaimStatus.PENDING,
-        "last_event_at": datetime.utcnow(),
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
+        "last_event_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     }
-    
+
     await db.claims.insert_one(claim)
-    
+
     # Create initial event
     event = {
         "_id": str(uuid.uuid4()),
@@ -697,38 +758,38 @@ async def create_claim(
         "claim_id": claim_id,
         "event_type": "submitted",
         "description": f"Claim submitted to {claim_data.insurance_provider} for ${claim_data.amount:.2f}",
-        "at": datetime.utcnow(),
-        "time": datetime.utcnow().strftime("%I:%M %p"),
-        "created_at": datetime.utcnow()
+        "at": datetime.now(timezone.utc),
+        "time": datetime.now(timezone.utc).strftime("%I:%M %p"),
+        "created_at": datetime.now(timezone.utc),
     }
-    
+
     await db.claim_events.insert_one(event)
-    
+
     # Broadcast event
-    await broadcast_event(tenant_id, "claim", "insert", {
-        "claim_id": claim_id,
-        "patient_name": claim["patient_name"]
-    })
-    
+    await broadcast_event(
+        tenant_id,
+        "claim",
+        "insert",
+        {"claim_id": claim_id, "patient_name": claim["patient_name"]},
+    )
+
     return {
         "claim_id": claim_id,
         "claim_id_display": claim_id_display,
         "status": ClaimStatus.PENDING,
-        "message": "Claim created successfully"
+        "message": "Claim created successfully",
     }
 
+
 @app.get("/api/claims/{claim_id}")
-async def get_claim(
-    claim_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+async def get_claim(claim_id: str, current_user: dict = Depends(get_current_user)):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     claim = await db.claims.find_one({"_id": claim_id, "tenant_id": tenant_id})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    
+
     return {
         "claim_id": claim["_id"],
         "claim_id_display": claim["claim_id"],
@@ -740,32 +801,36 @@ async def get_claim(
         "service_date": claim["service_date"],
         "submitted_date": claim["submitted_date"],
         "description": claim.get("description"),
-        "status": claim["status"]
+        "status": claim["status"],
     }
+
 
 @app.get("/api/claims/{claim_id}/events")
 async def get_claim_events(
-    claim_id: str,
-    current_user: dict = Depends(get_current_user)
+    claim_id: str, current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
-    cursor = db.claim_events.find({"claim_id": claim_id, "tenant_id": tenant_id}).sort("at", 1)
+
+    cursor = db.claim_events.find({"claim_id": claim_id, "tenant_id": tenant_id}).sort(
+        "at", 1
+    )
     events = await cursor.to_list(length=100)
-    
+
     return [
         {
             "event_id": event["_id"],
             "event_type": event["event_type"],
             "description": event["description"],
             "at": event["at"].strftime("%Y-%m-%d"),
-            "time": event["time"]
+            "time": event["time"],
         }
         for event in events
     ]
 
+
 # ==================== APPOINTMENT ROUTES ====================
+
 
 @app.get("/api/appointments")
 async def list_appointments(
@@ -773,61 +838,67 @@ async def list_appointments(
     provider_id: Optional[str] = None,
     patient_id: Optional[str] = None,
     limit: int = 50,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     query = {"tenant_id": tenant_id}
     if provider_id:
         query["provider_id"] = provider_id
     if patient_id:
         query["patient_id"] = patient_id
-    
+
     if date == "today":
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         query["starts_at"] = {
             "$gte": datetime.combine(today, datetime.min.time()),
-            "$lt": datetime.combine(today + timedelta(days=1), datetime.min.time())
+            "$lt": datetime.combine(today + timedelta(days=1), datetime.min.time()),
         }
     elif date:
         date_obj = datetime.strptime(date, "%Y-%m-%d").date()
         query["starts_at"] = {
             "$gte": datetime.combine(date_obj, datetime.min.time()),
-            "$lt": datetime.combine(date_obj + timedelta(days=1), datetime.min.time())
+            "$lt": datetime.combine(date_obj + timedelta(days=1), datetime.min.time()),
         }
-    
+
     cursor = db.appointments.find(query).sort("starts_at", 1).limit(limit)
     appointments = await cursor.to_list(length=limit)
-    
+
     result = []
     for apt in appointments:
         patient = await db.patients.find_one({"_id": apt["patient_id"]})
-        result.append({
-            "appointment_id": apt["_id"],
-            "patient_name": f"{patient['first_name']} {patient['last_name']}" if patient else "Unknown",
-            "provider_name": "Dr. James O'Brien",
-            "type": apt["type"],
-            "time": apt["starts_at"].strftime("%I:%M %p"),
-            "starts_at": apt["starts_at"],
-            "ends_at": apt["ends_at"],
-            "status": apt["status"],
-            "location": apt.get("location"),
-            "title": apt.get("title")
-        })
-    
+        result.append(
+            {
+                "appointment_id": apt["_id"],
+                "patient_name": (
+                    f"{patient['first_name']} {patient['last_name']}"
+                    if patient
+                    else "Unknown"
+                ),
+                "provider_name": "Dr. James O'Brien",
+                "type": apt["type"],
+                "time": apt["starts_at"].strftime("%I:%M %p"),
+                "starts_at": apt["starts_at"],
+                "ends_at": apt["ends_at"],
+                "status": apt["status"],
+                "location": apt.get("location"),
+                "title": apt.get("title"),
+            }
+        )
+
     return result
+
 
 @app.post("/api/appointments")
 async def create_appointment(
-    appointment_data: AppointmentCreate,
-    current_user: dict = Depends(get_current_user)
+    appointment_data: AppointmentCreate, current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
+
     appointment_id = str(uuid.uuid4())
-    
+
     appointment = {
         "_id": appointment_id,
         "tenant_id": tenant_id,
@@ -841,92 +912,124 @@ async def create_appointment(
         "status": "scheduled",
         "google_calendar": {
             "event_id": f"mock-event-{appointment_id[:8]}",
-            "calendar_id": "primary"
+            "calendar_id": "primary",
         },
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     }
-    
+
     await db.appointments.insert_one(appointment)
-    
+
     # Increment patient appointment count
     await db.patients.update_one(
-        {"_id": appointment_data.patient_id},
-        {"$inc": {"appointments_count": 1}}
+        {"_id": appointment_data.patient_id}, {"$inc": {"appointments_count": 1}}
     )
-    
+
     # Broadcast event
-    await broadcast_event(tenant_id, "appointment", "insert", {
-        "appointment_id": appointment_id,
-        "patient_id": appointment_data.patient_id
-    })
-    
+    await broadcast_event(
+        tenant_id,
+        "appointment",
+        "insert",
+        {"appointment_id": appointment_id, "patient_id": appointment_data.patient_id},
+    )
+
     return {
         "appointment_id": appointment_id,
         "google_calendar": {
             "event_id": appointment["google_calendar"]["event_id"],
-            "event_link": f"https://calendar.google.com/event?eid={appointment_id[:10]}"
+            "event_link": f"https://calendar.google.com/event?eid={appointment_id[:10]}",
         },
-        "message": "Appointment created successfully"
+        "message": "Appointment created successfully",
     }
 
+
 # ==================== DASHBOARD ROUTES ====================
+
 
 @app.get("/api/dashboard/stats")
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     db = get_db()
     tenant_id = current_user["tenant_id"]
-    
-    pending_tasks = await db.tasks.count_documents({
-        "tenant_id": tenant_id,
-        "state": TaskState.OPEN
-    })
-    
-    today = datetime.utcnow().date()
-    appointments_today = await db.appointments.count_documents({
-        "tenant_id": tenant_id,
-        "starts_at": {
-            "$gte": datetime.combine(today, datetime.min.time()),
-            "$lt": datetime.combine(today + timedelta(days=1), datetime.min.time())
+
+    pending_tasks = await db.tasks.count_documents(
+        {"tenant_id": tenant_id, "state": TaskState.OPEN}
+    )
+
+    today = datetime.now(timezone.utc).date()
+    appointments_today = await db.appointments.count_documents(
+        {
+            "tenant_id": tenant_id,
+            "starts_at": {
+                "$gte": datetime.combine(today, datetime.min.time()),
+                "$lt": datetime.combine(today + timedelta(days=1), datetime.min.time()),
+            },
         }
-    })
-    
+    )
+
     patients_total = await db.patients.count_documents({"tenant_id": tenant_id})
-    
-    claims_pending = await db.claims.count_documents({
-        "tenant_id": tenant_id,
-        "status": ClaimStatus.PENDING
-    })
-    
+
+    claims_pending = await db.claims.count_documents(
+        {"tenant_id": tenant_id, "status": ClaimStatus.PENDING}
+    )
+
     return {
         "pending_tasks": pending_tasks,
         "appointments_today": appointments_today,
         "patients_total": patients_total,
-        "claims_pending": claims_pending
+        "claims_pending": claims_pending,
     }
 
-# ==================== WEBSOCKET ROUTE ====================
 
-@app.websocket("/ws/tenant/{tenant_id}")
-async def websocket_endpoint(websocket: WebSocket, tenant_id: str):
-    await manager.connect(websocket, tenant_id)
-    try:
-        while True:
-            # Keep connection alive
-            data = await websocket.receive_text()
-            # Handle subscriptions if needed
-            message = json.loads(data)
-            if message.get("type") == "ping":
-                await websocket.send_json({"type": "pong"})
-    except WebSocketDisconnect:
-        await manager.disconnect(websocket, tenant_id)
+# ==================== SSE STREAMING ROUTE ====================
+
+
+@app.get("/api/stream/events/{tenant_id}")
+async def stream_events(tenant_id: str):
+    """Server-Sent Events endpoint for real-time updates"""
+
+    async def event_generator():
+        # Create queue for this connection
+        q = queue.Queue(maxsize=100)
+
+        # Register queue for tenant
+        if tenant_id not in event_queues:
+            event_queues[tenant_id] = []
+        event_queues[tenant_id].append(q)
+
+        try:
+            # Send initial connection message
+            yield f"data: {json.dumps({'type': 'connected', 'tenant_id': tenant_id})}\n\n"
+
+            while True:
+                # Wait for events with timeout
+                try:
+                    event = q.get(timeout=30)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except queue.Empty:
+                    # Send keepalive ping
+                    yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+        except asyncio.CancelledError:
+            # Client disconnected
+            pass
+        finally:
+            # Cleanup
+            if tenant_id in event_queues:
+                event_queues[tenant_id].remove(q)
+                if not event_queues[tenant_id]:
+                    del event_queues[tenant_id]
+
+    return StreamingResponse(
+        event_generator(), media_type="text/event-stream"
+    )
+
 
 # ==================== COPILOT ENDPOINT ====================
+
 
 @app.post("/api/copilot")
 async def copilot_endpoint(request: dict):
     """Simple CopilotKit endpoint"""
     return {
         "response": "I'm here to help with BacklineMD. How can I assist you today?",
-        "context": "Dashboard"
+        "context": "Dashboard",
     }

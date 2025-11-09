@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { DollarSign, Mail, Phone, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Card } from '../components/ui/card';
@@ -22,13 +22,7 @@ const TreasuryPage = () => {
   const [selectedClaim, setSelectedClaim] = useState(null);
   const [showCreateClaimModal, setShowCreateClaimModal] = useState(false);
 
-  useEffect(() => {
-    fetchClaims();
-    const interval = setInterval(fetchClaims, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchClaims = async () => {
+  const fetchClaims = useCallback(async () => {
     try {
       // Mock data for now - replace with actual API call
       const mockClaims = [
@@ -66,7 +60,13 @@ const TreasuryPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchClaims();
+    const interval = setInterval(fetchClaims, 30000);
+    return () => clearInterval(interval);
+  }, [fetchClaims]);
 
   // Provide all claims context to CopilotKit
   useCopilotContext({
@@ -84,18 +84,26 @@ const TreasuryPage = () => {
 
   const filters = [
     { value: 'all', label: 'All', count: claims.length },
-    { value: 'pending', label: 'Pending', count: claims.filter(c => c.status === 'Pending').length },
-    { value: 'approved', label: 'Approved', count: claims.filter(c => c.status === 'Approved').length },
-    { value: 'denied', label: 'Denied', count: claims.filter(c => c.status === 'Denied').length },
+    { value: 'pending', label: 'Pending', count: claims.filter(c => c.status?.toLowerCase() === 'pending').length },
+    { value: 'submitted', label: 'Submitted', count: claims.filter(c => c.status?.toLowerCase() === 'submitted').length },
+    { value: 'under_review', label: 'Under Review', count: claims.filter(c => c.status?.toLowerCase() === 'under_review').length },
+    { value: 'approved', label: 'Approved', count: claims.filter(c => c.status?.toLowerCase() === 'approved').length },
+    { value: 'settlement_in_progress', label: 'Settlement', count: claims.filter(c => c.status?.toLowerCase() === 'settlement_in_progress').length },
   ];
 
   const getStatusColor = (status) => {
+    const statusLower = status?.toLowerCase() || '';
     const colors = {
-      'Pending': 'bg-yellow-100 text-yellow-700',
-      'Approved': 'bg-green-100 text-green-700',
-      'Denied': 'bg-red-100 text-red-700',
+      'pending': 'bg-gray-100 text-gray-700',
+      'submitted': 'bg-blue-100 text-blue-700',
+      'received': 'bg-cyan-100 text-cyan-700',
+      'under_review': 'bg-yellow-100 text-yellow-700',
+      'approved': 'bg-green-100 text-green-700',
+      'denied': 'bg-red-100 text-red-700',
+      'settlement_in_progress': 'bg-purple-100 text-purple-700',
+      'settlement_done': 'bg-emerald-100 text-emerald-700',
     };
-    return colors[status] || 'bg-gray-100 text-gray-700';
+    return colors[statusLower] || 'bg-gray-100 text-gray-700';
   };
 
   const handleEmailClick = (claim) => {

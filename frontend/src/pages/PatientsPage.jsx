@@ -6,6 +6,8 @@ import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
 import CreatePatientModal from '../components/CreatePatientModal';
 import { apiService } from '../services/api';
+import sseClient from '../services/sse';
+import { toast } from 'sonner';
 
 const PatientsPage = () => {
   const navigate = useNavigate();
@@ -18,6 +20,25 @@ const PatientsPage = () => {
   useEffect(() => {
     fetchPatients();
   }, [searchQuery]);
+
+  // Subscribe to patient events for real-time updates
+  useEffect(() => {
+    const unsubscribe = sseClient.on('patient', (event) => {
+      console.log('Patient event received:', event);
+
+      // Show toast notification
+      if (event.action === 'created') {
+        toast.success(`New patient: ${event.data?.first_name} ${event.data?.last_name}`);
+      } else if (event.action === 'updated') {
+        toast.info(`Patient updated: ${event.data?.first_name} ${event.data?.last_name}`);
+      }
+
+      // Refresh patient list
+      fetchPatients();
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const fetchPatients = async () => {
     setLoading(true);
@@ -50,10 +71,28 @@ const PatientsPage = () => {
 
   const getStatusColor = (status) => {
     const colors = {
-      'Processing': 'bg-yellow-100 text-yellow-700',
-      'Approved': 'bg-green-100 text-green-700',
-      'Active': 'bg-blue-100 text-blue-700',
-      'Pending': 'bg-gray-100 text-gray-700',
+      // Intake phase
+      'Intake In Progress': 'bg-blue-100 text-blue-700',
+      'Intake Done': 'bg-green-100 text-green-700',
+
+      // Document collection phase
+      'Doc Collection In Progress': 'bg-yellow-100 text-yellow-700',
+      'Doc Collection Done': 'bg-green-100 text-green-700',
+
+      // Consultation phase
+      'Consultation Scheduled': 'bg-purple-100 text-purple-700',
+      'Awaiting Response': 'bg-orange-100 text-orange-700',
+
+      // Review phase
+      'Review Scheduled': 'bg-indigo-100 text-indigo-700',
+      'Review Done': 'bg-green-100 text-green-700',
+
+      // Procedure phase
+      'Procedure Scheduled': 'bg-pink-100 text-pink-700',
+      'Procedure Done': 'bg-green-100 text-green-700',
+
+      // Complete
+      'Consultation Complete': 'bg-emerald-100 text-emerald-700',
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
   };

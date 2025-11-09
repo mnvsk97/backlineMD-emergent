@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Send, Mic, FileCheck, Calendar, Clock, User, AlertTriangle, FileText, Users, Briefcase } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
+import sseClient from '../services/sse';
+import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -18,13 +20,7 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [chatInput, setChatInput] = useState('');
 
-  useEffect(() => {
-    fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const [tasksRes, patientsRes, appointmentsRes] = await Promise.all([
         axios.get(`${API}/tasks`),
@@ -39,7 +35,43 @@ const DashboardPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchDashboardData]);
+
+  // Subscribe to multiple event types for real-time dashboard updates
+  useEffect(() => {
+    const unsubscribePatient = sseClient.on('patient', (event) => {
+      console.log('Patient event on dashboard:', event);
+      fetchDashboardData();
+    });
+
+    const unsubscribeTask = sseClient.on('task', (event) => {
+      console.log('Task event on dashboard:', event);
+      fetchDashboardData();
+    });
+
+    const unsubscribeClaim = sseClient.on('claim', (event) => {
+      console.log('Claim event on dashboard:', event);
+      fetchDashboardData();
+    });
+
+    const unsubscribeAppointment = sseClient.on('appointment', (event) => {
+      console.log('Appointment event on dashboard:', event);
+      fetchDashboardData();
+    });
+
+    return () => {
+      unsubscribePatient();
+      unsubscribeTask();
+      unsubscribeClaim();
+      unsubscribeAppointment();
+    };
+  }, [fetchDashboardData]);
 
   // Provide context to CopilotKit
   useCopilotContext({

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { CopilotKit } from '@copilotkit/react-core';
 import { ChatProvider } from './context/ChatContext';
@@ -10,11 +10,28 @@ import PatientDetailsPage from './pages/PatientDetailsPage';
 import TasksPage from './pages/TasksPage';
 import TreasuryPage from './pages/TreasuryPage';
 import { Toaster } from './components/ui/sonner';
+import sseClient from './services/sse';
 import './App.css';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 function App() {
+  useEffect(() => {
+    // Connect to SSE for real-time updates
+    sseClient.connect();
+
+    // Subscribe to all events for logging (optional)
+    const unsubscribe = sseClient.on('*', (data) => {
+      console.log('SSE Event:', data);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      unsubscribe();
+      sseClient.disconnect();
+    };
+  }, []);
+
   return (
     <CopilotKit runtimeUrl={`${BACKEND_URL}/api/copilot`}>
       <ChatProvider>
