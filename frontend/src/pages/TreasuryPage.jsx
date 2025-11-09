@@ -126,6 +126,12 @@ const TreasuryPage = () => {
         prefilledData={taskModalData}
       />
       
+      <ClaimDetailModal
+        isOpen={showClaimModal}
+        onClose={() => setShowClaimModal(false)}
+        claim={selectedClaim}
+      />
+      
       <Header 
         title="Treasury Claims" 
         subtitle="Manage insurance claims and billing"
