@@ -1,0 +1,10 @@
+{
+    "dependencies": [
+        "requirements.txt"
+    ],
+    "graphs": {
+        "insurance_agent": "./insurance.py:insurance_agent",
+        "onboarding_agent": "./onboarding.py:onboarding_agent"
+    },
+    "env": "../.env"
+}
