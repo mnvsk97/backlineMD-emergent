@@ -103,23 +103,26 @@
 #====================================================================================================
 
 user_problem_statement: |
-  1. Chat on main dashboard should have CopilotKit chat instead of plain one (similar to patient details page)
-  2. Remove TIME SAVED and AI Comms stats from dashboard
+  Complete UI redesign to match FertilityOS design:
+  1. Purple/blue color scheme throughout
+  2. Dashboard with centered chat + CopilotPopup on Send
+  3. Context-aware CopilotPopup for all pages (Dashboard, Patients, Patient Details, Tasks)
+  4. Clean, professional enterprise-grade design for healthcare deployment
 
 frontend:
-  - task: "Add CopilotKit chat to main dashboard"
+  - task: "Complete UI redesign with purple theme"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/DashboardPage.jsx"
+    file: "/app/frontend/src/index.css, /app/frontend/src/App.css"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
       - working: true
         agent: "main"
-        comment: "Successfully integrated CopilotKit chat component on dashboard. Chat appears as floating panel on right side with AI Assistant title, suggested questions, and message input. Verified with screenshot."
+        comment: "Rebuilt entire frontend from scratch with purple/blue color scheme. Updated CSS variables and tailwind config for consistent purple theme."
 
-  - task: "Remove TIME SAVED and AI COMMS stats"
+  - task: "Dashboard with centered chat"
     implemented: true
     working: true
     file: "/app/frontend/src/pages/DashboardPage.jsx"
@@ -129,22 +132,95 @@ frontend:
     status_history:
       - working: true
         agent: "main"
-        comment: "Removed TIME SAVED and AI COMMS stat cards from dashboard. Changed grid from 4 columns to 2 columns. Only PENDING and APPOINTMENTS stats remain. Verified with screenshot."
+        comment: "Completely redesigned dashboard with centered greeting 'Good morning, Dr. O'Brien', centered chat input with Send button, suggested quick action buttons, Actions Feed on left, and Today's Schedule on right. CopilotPopup opens when Send is clicked."
+
+  - task: "CopilotPopup integration with context"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/CopilotChatPopup.jsx, /app/frontend/src/context/ChatContext.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Implemented CopilotPopup that opens on right side when user clicks Send or interacts with pages. Chat has context awareness using useCopilotReadable hook. Each page provides its own context (dashboard: all data, patients: patient list, patient details: specific patient, tasks: task list)."
+
+  - task: "Sidebar navigation"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/Sidebar.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Created clean sidebar with backlineMD logo, Dashboard/Patients/Tasks navigation with purple active states, and Settings/Logout at bottom."
+
+  - task: "Header component"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/Header.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Created reusable Header with search, notifications, and user profile. Used across all pages for consistency."
+
+  - task: "Patients page redesign"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/PatientsPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Redesigned patients list with purple theme, clean cards showing patient info, status badges, and task/appointment counts. Context-aware CopilotPopup available."
+
+  - task: "Patient Details page redesign"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/PatientDetailsPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Completely redesigned patient details with purple theme, tabs (Summary/Tasks/Appointments/Activities/Docs), AI-generated summary, patient info, treatment timeline, notes, and insurance status. Context includes specific patient details for AI chat."
+
+  - task: "Tasks page redesign"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/TasksPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Redesigned tasks page with filter tabs (All/Urgent/High Priority/Needs Review), purple theme, task cards with confidence scores, priorities, and Approve/Reject buttons. Context-aware CopilotPopup opens on click."
 
 metadata:
   created_by: "main_agent"
-  version: "1.0"
+  version: "2.0"
   test_sequence: 1
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Add CopilotKit chat to main dashboard"
-    - "Remove TIME SAVED and AI COMMS stats"
+    - "Complete UI redesign"
+    - "CopilotPopup integration"
+    - "Context-aware chat"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Completed both requested changes: 1) Added CopilotKit chat to dashboard as floating panel on right side, 2) Removed TIME SAVED and AI COMMS stats. Both changes verified with screenshot showing proper rendering."
+    message: "Complete frontend rebuild completed. All pages redesigned with purple/blue FertilityOS theme. CopilotPopup working on all pages with context awareness. Production-grade enterprise UI ready for healthcare deployment. Verified with screenshots of Dashboard, Patients, Patient Details, and Tasks pages."
