@@ -103,6 +103,7 @@ TOOL_PERMISSIONS = {
 
 # ==================== PATIENT TOOLS ====================
 
+
 @mcp.tool()
 async def get_patients() -> List[Dict[str, Any]]:
     """
@@ -118,6 +119,7 @@ async def get_patients() -> List[Dict[str, Any]]:
         for patient in patients
     ]
 
+
 @mcp.tool()
 async def find_or_create_patient(
     name: Optional[str] = None,
@@ -126,7 +128,7 @@ async def find_or_create_patient(
     dob: Optional[str] = None,
     gender: Optional[str] = None,
     insurance_company: Optional[str] = None,
-    insurance_policy_number: Optional[str] = None
+    insurance_policy_number: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Find an existing patient or create a new one.
@@ -158,7 +160,8 @@ async def find_or_create_patient(
     if existing:
         return {
             "patient_id": existing["_id"],
-            "name": f"{existing.get('first_name', '')} {existing.get('last_name', '')}".strip() or existing.get("name", ""),
+            "name": f"{existing.get('first_name', '')} {existing.get('last_name', '')}".strip()
+            or existing.get("name", ""),
             "email": existing["contact"]["email"],
             "phone": existing["contact"]["phone"],
             "mrn": existing["mrn"],
@@ -190,7 +193,7 @@ async def find_or_create_patient(
             "title": "Initial Consultation",
             "status": "pending",
             "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            "description": "Initial consultation pending"
+            "description": "Initial consultation pending",
         }
     ]
 
@@ -200,7 +203,11 @@ async def find_or_create_patient(
         try:
             dob_date = datetime.strptime(dob, "%Y-%m-%d").date()
             today = datetime.now(timezone.utc).date()
-            age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+            age = (
+                today.year
+                - dob_date.year
+                - ((today.month, today.day) < (dob_date.month, dob_date.day))
+            )
         except:
             pass
 
@@ -249,10 +256,14 @@ async def find_or_create_patient(
     # Step 2: Generate AI summary for the patient
     try:
         # Generate a simple summary for new patient
-        preconditions_text = ", ".join(patient.get("preconditions", [])) if patient.get("preconditions") else "no documented preconditions"
+        preconditions_text = (
+            ", ".join(patient.get("preconditions", []))
+            if patient.get("preconditions")
+            else "no documented preconditions"
+        )
         age_text = f"{age}-year-old" if age else "patient"
         summary_text = f"{age_text} {patient.get('gender', 'Unknown').lower()} patient with {preconditions_text}. Currently in intake process. Initial consultation pending. Medical records collection in progress."
-        
+
         # Store summary in patient document
         await db.patients.update_one(
             {"_id": patient_id, "tenant_id": DEFAULT_TENANT},
@@ -261,25 +272,39 @@ async def find_or_create_patient(
                     "ai_summary": summary_text,
                     "ai_summary_generated_at": datetime.now(timezone.utc),
                 }
-            }
+            },
         )
     except Exception as e:
         print(f"Warning: Failed to generate AI summary: {e}")
 
     # Get form templates to create default consent forms
-    form_templates = await db.form_templates.find({"tenant_id": DEFAULT_TENANT}).to_list(length=10)
-    
+    form_templates = await db.form_templates.find(
+        {"tenant_id": DEFAULT_TENANT}
+    ).to_list(length=10)
+
     # Default 4 consent forms if no templates exist
     default_forms = [
-        {"name": "Insurance Information Release", "description": "Authorization to release medical information to insurance provider"},
-        {"name": "Medical Records Request - Lab", "description": "Request medical records from external laboratory"},
-        {"name": "HIPAA Authorization Form", "description": "HIPAA compliant authorization for information disclosure"},
-        {"name": "Consent for Treatment", "description": "Patient consent for proposed treatment plan"},
+        {
+            "name": "Insurance Information Release",
+            "description": "Authorization to release medical information to insurance provider",
+        },
+        {
+            "name": "Medical Records Request - Lab",
+            "description": "Request medical records from external laboratory",
+        },
+        {
+            "name": "HIPAA Authorization Form",
+            "description": "HIPAA compliant authorization for information disclosure",
+        },
+        {
+            "name": "Consent for Treatment",
+            "description": "Patient consent for proposed treatment plan",
+        },
     ]
-    
+
     # Use templates if available, otherwise use default forms
     forms_to_create = form_templates if form_templates else default_forms
-    
+
     # Create default consent forms with "to_do" status (always create 4 forms)
     created_forms = []
     for i, template in enumerate(forms_to_create[:4]):  # Always create exactly 4 forms
@@ -302,10 +327,39 @@ async def find_or_create_patient(
         await db.consent_forms.insert_one(consent_form)
         created_forms.append(consent_form_id)
 
-    # Create AI tasks for document extraction, care taker, and intake agents
+    # Create AI tasks for consent email, document extraction, and welcome email
     tasks_created = []
-    
-    # Task 1: Document extraction AI agent - set to TODO (open)
+
+    # Task 1: Send consent email - TODO (open)
+    consent_email_task_id = str(uuid.uuid4())
+    consent_email_task = {
+        "_id": consent_email_task_id,
+        "task_id": f"T{random.randint(10000, 99999)}",
+        "tenant_id": DEFAULT_TENANT,
+        "source": "agent",
+        "kind": "consent_forms",
+        "title": f"Send Consent Email to Patient - {full_name}",
+        "description": f"New patient {full_name} has been created. Please send consent forms email to the patient.",
+        "patient_id": patient_id,  # Ensure patient_id is set correctly
+        "patient_name": full_name,
+        "assigned_to": "Dr. James O'Brien",
+        "agent_type": "care_taker",
+        "priority": "medium",
+        "state": "open",  # TODO state
+        "confidence_score": 1.0,
+        "waiting_minutes": 0,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": "ai_agent",
+    }
+    await db.tasks.insert_one(consent_email_task)
+    tasks_created.append(consent_email_task_id)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(
+        f"DEBUG: Created consent email task with patient_id: {patient_id}, task_id: {consent_email_task_id}"
+    )
+
+    # Task 2: Document extraction - TODO (open)
     doc_extraction_task_id = str(uuid.uuid4())
     doc_extraction_task = {
         "_id": doc_extraction_task_id,
@@ -315,7 +369,7 @@ async def find_or_create_patient(
         "kind": "document_review",
         "title": f"Extract and Review Patient Documents - {full_name}",
         "description": f"New patient {full_name} has been created. Please review and extract information from any uploaded documents. Ensure all medical records are properly processed and indexed.",
-        "patient_id": patient_id,
+        "patient_id": patient_id,  # Ensure patient_id is set correctly
         "patient_name": full_name,
         "assigned_to": "AI - Document Extractor",
         "agent_type": "doc_extraction",
@@ -330,44 +384,21 @@ async def find_or_create_patient(
     await db.tasks.insert_one(doc_extraction_task)
     tasks_created.append(doc_extraction_task_id)
     await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(
+        f"DEBUG: Created document extraction task with patient_id: {patient_id}, task_id: {doc_extraction_task_id}"
+    )
 
-    # Task 2: Care taker agent - send consent forms
-    care_taker_task_id = str(uuid.uuid4())
-    care_taker_task = {
-        "_id": care_taker_task_id,
+    # Task 3: Intake agent - send welcome email asking for medical records (in_progress)
+    welcome_email_task_id = str(uuid.uuid4())
+    welcome_email_task = {
+        "_id": welcome_email_task_id,
         "task_id": f"T{random.randint(10000, 99999)}",
         "tenant_id": DEFAULT_TENANT,
         "source": "agent",
-        "kind": "consent_forms",
-        "title": f"Send Consent Forms to Patient - {full_name}",
-        "description": f"New patient {full_name} has been created. Please send consent forms (Insurance Information Release, Medical Records Request, HIPAA Authorization, and Consent for Treatment) to the patient via email or DocuSign.",
-        "patient_id": patient_id,
-        "patient_name": full_name,
-        "assigned_to": "Dr. James O'Brien",
-        "agent_type": "care_taker",
-        "priority": "medium",
-        "state": "open",  # TODO state
-        "confidence_score": 1.0,
-        "waiting_minutes": 0,
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
-        "created_by": "ai_agent",
-    }
-    await db.tasks.insert_one(care_taker_task)
-    tasks_created.append(care_taker_task_id)
-    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
-
-    # Task 3: Intake agent - collect medical records (set to in_progress)
-    intake_task_id = str(uuid.uuid4())
-    intake_task = {
-        "_id": intake_task_id,
-        "task_id": f"T{random.randint(10000, 99999)}",
-        "tenant_id": DEFAULT_TENANT,
-        "source": "agent",
-        "kind": "medical_records_collection",
-        "title": f"Collect Medical Records - {full_name}",
-        "description": f"New patient {full_name} has been created. Please collect and review medical records including medical history, lab results, imaging reports, and any previous treatment documentation.",
-        "patient_id": patient_id,
+        "kind": "welcome_email",
+        "title": f"Send Welcome Email and Request Medical Records - {full_name}",
+        "description": f"New patient {full_name} has been created. Send welcome email and request medical records from the patient.",
+        "patient_id": patient_id,  # Ensure patient_id is set correctly
         "patient_name": full_name,
         "assigned_to": "AI - Intake Agent",
         "agent_type": "intake",
@@ -379,48 +410,36 @@ async def find_or_create_patient(
         "updated_at": datetime.now(timezone.utc),
         "created_by": "ai_agent",
     }
-    await db.tasks.insert_one(intake_task)
-    tasks_created.append(intake_task_id)
+    await db.tasks.insert_one(welcome_email_task)
+    tasks_created.append(welcome_email_task_id)
     await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(
+        f"DEBUG: Created welcome email task with patient_id: {patient_id}, task_id: {welcome_email_task_id}"
+    )
+    print(
+        f"DEBUG: All tasks created for patient_id: {patient_id}, total: {len(tasks_created)}"
+    )
 
     # Step 3: Tasks are created ✓ (done above)
 
-    # Step 4: Send welcome email synchronously (hardcoded email for now)
+    # Step 4: Send welcome email using send_welcome_email function
     email_result = None
     try:
-        from composio_integration import send_email_via_composio
-        # Hardcode email for now as requested
-        patient_email = "mnvsk97@gmail.com"  # Hardcoded email
-        welcome_subject = "Welcome to BacklineMD - Your Healthcare Journey Begins"
-        welcome_body = f"""
-Dear {first_name},
+        from composio_integration import send_welcome_email
 
-Welcome to BacklineMD! We're excited to have you as part of our healthcare family.
-
-Your patient record has been created successfully:
-- Patient ID: {mrn}
-- Name: {full_name}
-- Email: {patient["contact"]["email"]}
-- Phone: {patient["contact"]["phone"]}
-
-Our team is here to support you throughout your healthcare journey. You can expect:
-- Personalized care from our experienced medical team
-- Easy access to your medical records and appointments
-- Secure communication through our patient portal
-
-If you have any questions or need assistance, please don't hesitate to reach out to us.
-
-Best regards,
-The BacklineMD Team
-        """
-        # Send email synchronously (wait for it)
-        email_result = await send_email_via_composio(
-            to_email=patient_email,
-            subject=welcome_subject,
-            body=welcome_body,
-            user_id="backlinemd-system"
+        # Send welcome email
+        email_result = await send_welcome_email(
+            patient_email=patient["contact"]["email"], patient_name=full_name
         )
-        print(f"Email sent result: {email_result}")
+        print(f"Welcome email sent result: {email_result}")
+
+        # Mark welcome email task as done if email was sent successfully
+        if email_result.get("success"):
+            await db.tasks.update_one(
+                {"_id": welcome_email_task_id, "tenant_id": DEFAULT_TENANT},
+                {"$set": {"state": "done", "updated_at": datetime.now(timezone.utc)}},
+            )
+            print(f"Welcome email task marked as done")
     except Exception as e:
         # Log error but don't fail patient creation
         print(f"Warning: Failed to send welcome email: {e}")
@@ -755,7 +774,9 @@ async def delete_appointment(appointment_id: str) -> Dict[str, Any]:
     if client:
         async with client.start_session() as session:
             async with session.start_transaction():
-                await db.appointments.delete_one({"_id": appointment_id}, session=session)
+                await db.appointments.delete_one(
+                    {"_id": appointment_id}, session=session
+                )
                 await db.patients.update_one(
                     {"_id": appointment["patient_id"]},
                     {"$inc": {"appointments_count": -1}},
@@ -1435,9 +1456,7 @@ async def create_task(
                 )
     else:
         await db.tasks.insert_one(task)
-        await db.patients.update_one(
-            {"_id": patient_id}, {"$inc": {"tasks_count": 1}}
-        )
+        await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
 
     return {
         "task_id": task_id,

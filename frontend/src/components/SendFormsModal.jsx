@@ -5,7 +5,7 @@ import { X, Mail, FileText } from 'lucide-react';
 import { Card } from './ui/card';
 import { toast } from 'sonner';
 
-const SendFormsModal = ({ isOpen, onClose, patientEmail, availableForms = [] }) => {
+const SendFormsModal = ({ isOpen, onClose, patientEmail, patientId, availableForms = [], onSuccess }) => {
   const [selectedForms, setSelectedForms] = useState([]);
   const [sending, setSending] = useState(false);
 
@@ -25,15 +25,42 @@ const SendFormsModal = ({ isOpen, onClose, patientEmail, availableForms = [] }) 
 
     setSending(true);
     try {
-      // Mock API call - replace with actual DocuSign/email integration
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
+      const API = `${BACKEND_URL}/api`;
       
-      toast.success(`${selectedForms.length} form(s) sent to ${patientEmail} via DocuSign`);
-      onClose();
-      setSelectedForms([]);
+      if (!patientId) {
+        toast.error('Patient ID is required');
+        return;
+      }
       
-      // Trigger refresh
-      setTimeout(() => window.location.reload(), 1000);
+      // Call API to send consent forms email
+      const response = await fetch(`${API}/consent-forms/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          patient_id: patientId,
+          form_ids: selectedForms
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(`Consent forms email sent to ${patientEmail}`);
+        onClose();
+        setSelectedForms([]);
+        
+        // Trigger refresh
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          setTimeout(() => window.location.reload(), 1000);
+        }
+      } else {
+        toast.error(result.message || 'Failed to send consent forms');
+      }
     } catch (error) {
       console.error('Error sending forms:', error);
       toast.error('Failed to send forms');

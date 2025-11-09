@@ -14,6 +14,7 @@ class UserRole(str, Enum):
 
 class PatientStatus(str, Enum):
     """Patient workflow statuses"""
+
     INTAKE_IN_PROGRESS = "Intake In Progress"
     INTAKE_DONE = "Intake Done"
     DOC_COLLECTION_IN_PROGRESS = "Doc Collection In Progress"
@@ -37,6 +38,7 @@ class DocumentKind(str, Enum):
 
 class DocumentStatus(str, Enum):
     """Document status values"""
+
     UPLOADED = "uploaded"
     INGESTING = "ingesting"
     INGESTED = "ingested"
@@ -52,6 +54,7 @@ class ConsentFormStatus(str, Enum):
 
 class AppointmentStatus(str, Enum):
     """Appointment/Consultation statuses"""
+
     SCHEDULED = "scheduled"
     CONFIRMED = "confirmed"
     IN_PROGRESS = "in_progress"
@@ -77,6 +80,7 @@ class TaskPriority(str, Enum):
 
 class ClaimStatus(str, Enum):
     """Insurance claim statuses including settlement"""
+
     PENDING = "pending"
     SUBMITTED = "submitted"
     RECEIVED = "received"
@@ -89,6 +93,7 @@ class ClaimStatus(str, Enum):
 
 class AgentType(str, Enum):
     """Agent types for the orchestrator"""
+
     INTAKE = "intake"
     DOC_EXTRACTION = "doc_extraction"
     CARE_TAKER = "care_taker"
@@ -105,6 +110,7 @@ class AgentStatus(str, Enum):
 
 class MemoryAspect(str, Enum):
     """Memory aspects for context building"""
+
     INTAKE = "intake"
     DOCS = "docs"
     SCHEDULING = "scheduling"

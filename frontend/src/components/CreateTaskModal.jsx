@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
 
-const CreateTaskModal = ({ isOpen, onClose, prefilledData = {} }) => {
+const CreateTaskModal = ({ isOpen, onClose, prefilledData = {}, onSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',

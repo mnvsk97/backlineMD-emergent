@@ -4,24 +4,28 @@ Main orchestrator that routes tasks to specialized sub-agents
 """
 
 import os
-from deepagents import create_deep_agent
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_core.tools import Tool
 from typing import List
-from prompts import ORCHESTRATOR_PROMPT
+
 import aiofiles
+from deepagents import create_deep_agent
+from dotenv import load_dotenv
+from langchain_core.tools import Tool
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_openai import ChatOpenAI
+
+from prompts import ORCHESTRATOR_PROMPT
+
 
 async def get_tools() -> List[Tool]:
-    client = MultiServerMCPClient({
+    client = MultiServerMCPClient(
+        {
             "backlinemd": {
                 "url": "https://patient-flow-19.preview.emergentagent.com/api/special/mcp",
                 "transport": "streamable_http",
             }
         },
     )
-    
+
     return await client.get_tools()
 
 
@@ -37,7 +41,8 @@ async def load_prompt(prompt_file: str) -> str:
     prompt_path = os.path.join(os.path.dirname(__file__), "prompts", prompt_file)
     async with aiofiles.open(prompt_path, "r") as f:
         return await f.read()
-    
+
+
 agent_to_tools = {
     "intake": [
         "find_or_create_patient",
@@ -114,7 +119,9 @@ async def _create_subagents():
 
     # Get tools for each agent
     intake_tools = [name_to_Tool[tool] for tool in agent_to_tools["intake"]]
-    doc_extraction_tools = [name_to_Tool[tool] for tool in agent_to_tools["doc_extraction"]]
+    doc_extraction_tools = [
+        name_to_Tool[tool] for tool in agent_to_tools["doc_extraction"]
+    ]
     insurance_tools = [name_to_Tool[tool] for tool in agent_to_tools["insurance"]]
     care_taker_tools = [name_to_Tool[tool] for tool in agent_to_tools["care_taker"]]
     admin_tools = [name_to_Tool[tool] for tool in agent_to_tools["admin"]]
@@ -154,7 +161,7 @@ async def _create_subagents():
             "system_prompt": "You are an admin agent. You are responsible for managing patients, appointments, insurance claims, and documents. You are also responsible for managing the system and the users.",
             "tools": admin_tools,
             "model": "openai:gpt-4o",
-        }
+        },
     ]
 
 

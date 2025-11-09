@@ -9,13 +9,7 @@ from typing import List, Optional
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import (
-    FastAPI,
-    File,
-    HTTPException,
-    Request,
-    UploadFile,
-)
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
@@ -25,9 +19,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 # Import our modules
 from database import close_db, connect_db, get_db
-from logger import (
-    get_logger
-)
+from logger import get_logger
 from models import *
 
 # Composio email integration (temporarily disabled due to import issues)
@@ -43,7 +35,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     await connect_db()
-    
+
     logger.info("BacklineMD API started successfully")
     yield
     # Shutdown
@@ -65,7 +57,6 @@ app.add_middleware(
 
 # CopilotKit integration will be registered in lifespan handler
 # (moved there because graph initialization is async)
-
 
 
 # ==================== HELPER FUNCTIONS ====================
@@ -133,13 +124,39 @@ async def create_patient(patient_data: PatientCreate):
     full_name = f"{patient_data.first_name} {patient_data.last_name}"
     ngrams = generate_ngrams(full_name)
 
+    # Calculate age from DOB
+    age = None
+    if patient_data.dob:
+        try:
+            dob_date = datetime.strptime(patient_data.dob, "%Y-%m-%d").date()
+            today = datetime.now(timezone.utc).date()
+            age = (
+                today.year
+                - dob_date.year
+                - ((today.month, today.day) < (dob_date.month, dob_date.day))
+            )
+        except:
+            pass
+
+    # Initialize treatment timeline
+    treatment_timeline = [
+        {
+            "stage": "Initial Consultation",
+            "status": "pending",
+            "date": datetime.now(timezone.utc).isoformat(),
+            "notes": "Patient intake in progress",
+        }
+    ]
+
     patient = {
         "_id": patient_id,
         "tenant_id": tenant_id,
         "mrn": mrn,
         "first_name": patient_data.first_name,
         "last_name": patient_data.last_name,
+        "name": full_name,
         "dob": patient_data.dob,
+        "age": age,
         "gender": patient_data.gender,
         "contact": {
             "email": patient_data.email,
@@ -149,8 +166,14 @@ async def create_patient(patient_data: PatientCreate):
         "preconditions": patient_data.preconditions or [],
         "flags": [],
         "latest_vitals": {},
+        "height": None,
+        "weight": None,
+        "blood_type": None,
         "profile_image": patient_data.profile_image,
-        "status": "Intake In Progress",  # Default initial status
+        "status": "Intake In Progress",
+        "treatment_timeline": treatment_timeline,
+        "ai_summary": None,
+        "insurance": {},
         "tasks_count": 0,
         "appointments_count": 0,
         "flagged_count": 0,
@@ -162,7 +185,177 @@ async def create_patient(patient_data: PatientCreate):
 
     await db.patients.insert_one(patient)
 
-    return {"patient_id": patient_id, "message": "Patient created successfully"}
+    # Generate AI summary for the patient
+    try:
+        preconditions_text = (
+            ", ".join(patient_data.preconditions)
+            if patient_data.preconditions
+            else "no documented preconditions"
+        )
+        age_text = f"{age}-year-old" if age else "patient"
+        summary_text = f"{age_text} {patient_data.gender.lower()} patient with {preconditions_text}. Currently in intake process. Initial consultation pending. Medical records collection in progress."
+
+        await db.patients.update_one(
+            {"_id": patient_id, "tenant_id": tenant_id},
+            {
+                "$set": {
+                    "ai_summary": summary_text,
+                    "ai_summary_generated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+    except Exception as e:
+        print(f"Warning: Failed to generate AI summary: {e}")
+
+    # Create default consent forms (4 forms)
+    default_forms = [
+        {
+            "name": "Insurance Information Release",
+            "description": "Authorization to release medical information to insurance provider",
+        },
+        {
+            "name": "Medical Records Request - Lab",
+            "description": "Request medical records from external laboratory",
+        },
+        {
+            "name": "HIPAA Authorization Form",
+            "description": "HIPAA compliant authorization for information disclosure",
+        },
+        {
+            "name": "Consent for Treatment",
+            "description": "Patient consent for proposed treatment plan",
+        },
+    ]
+
+    created_forms = []
+    for i, form_template in enumerate(default_forms):
+        consent_form_id = str(uuid.uuid4())
+        consent_form = {
+            "_id": consent_form_id,
+            "tenant_id": tenant_id,
+            "patient_id": patient_id,
+            "patient_name": full_name,
+            "template_id": f"template-{i}",
+            "form_type": form_template.get("name", "consent"),
+            "title": form_template.get("name", "Consent Form"),
+            "status": "to_do",
+            "sent_via": None,
+            "sent_at": None,
+            "signed_at": None,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+        await db.consent_forms.insert_one(consent_form)
+        created_forms.append(consent_form_id)
+
+    # Create tasks for the patient
+    tasks_created = []
+
+    # Task 1: Send consent email - TODO (open)
+    consent_email_task_id = str(uuid.uuid4())
+    consent_email_task = {
+        "_id": consent_email_task_id,
+        "task_id": f"T{random.randint(10000, 99999)}",
+        "tenant_id": tenant_id,
+        "source": "agent",
+        "kind": "consent_forms",
+        "title": f"Send Consent Email to Patient - {full_name}",
+        "description": f"New patient {full_name} has been created. Please send consent forms email to the patient.",
+        "patient_id": patient_id,
+        "patient_name": full_name,
+        "assigned_to": "Dr. James O'Brien",
+        "agent_type": "care_taker",
+        "priority": "medium",
+        "state": "open",
+        "confidence_score": 1.0,
+        "waiting_minutes": 0,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": "ai_agent",
+    }
+    await db.tasks.insert_one(consent_email_task)
+    tasks_created.append(consent_email_task_id)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+
+    # Task 2: Document extraction - TODO (open)
+    doc_extraction_task_id = str(uuid.uuid4())
+    doc_extraction_task = {
+        "_id": doc_extraction_task_id,
+        "task_id": f"T{random.randint(10000, 99999)}",
+        "tenant_id": tenant_id,
+        "source": "agent",
+        "kind": "document_review",
+        "title": f"Extract and Review Patient Documents - {full_name}",
+        "description": f"New patient {full_name} has been created. Please review and extract information from any uploaded documents. Ensure all medical records are properly processed and indexed.",
+        "patient_id": patient_id,
+        "patient_name": full_name,
+        "assigned_to": "AI - Document Extractor",
+        "agent_type": "doc_extraction",
+        "priority": "medium",
+        "state": "open",
+        "confidence_score": 1.0,
+        "waiting_minutes": 0,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": "ai_agent",
+    }
+    await db.tasks.insert_one(doc_extraction_task)
+    tasks_created.append(doc_extraction_task_id)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+
+    # Task 3: Intake agent - send welcome email asking for medical records (in_progress)
+    welcome_email_task_id = str(uuid.uuid4())
+    welcome_email_task = {
+        "_id": welcome_email_task_id,
+        "task_id": f"T{random.randint(10000, 99999)}",
+        "tenant_id": tenant_id,
+        "source": "agent",
+        "kind": "welcome_email",
+        "title": f"Send Welcome Email and Request Medical Records - {full_name}",
+        "description": f"New patient {full_name} has been created. Send welcome email and request medical records from the patient.",
+        "patient_id": patient_id,
+        "patient_name": full_name,
+        "assigned_to": "AI - Intake Agent",
+        "agent_type": "intake",
+        "priority": "high",
+        "state": "in_progress",
+        "confidence_score": 1.0,
+        "waiting_minutes": 0,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": "ai_agent",
+    }
+    await db.tasks.insert_one(welcome_email_task)
+    tasks_created.append(welcome_email_task_id)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+
+    # Send welcome email
+    email_result = None
+    try:
+        from composio_integration import send_welcome_email
+
+        email_result = await send_welcome_email(
+            patient_email=patient_data.email, patient_name=full_name
+        )
+        print(f"Welcome email sent result: {email_result}")
+
+        # Mark welcome email task as done if email was sent successfully
+        if email_result.get("success"):
+            await db.tasks.update_one(
+                {"_id": welcome_email_task_id, "tenant_id": tenant_id},
+                {"$set": {"state": "done", "updated_at": datetime.now(timezone.utc)}},
+            )
+            print(f"Welcome email task marked as done")
+    except Exception as e:
+        print(f"Warning: Failed to send welcome email: {e}")
+        email_result = {"success": False, "error": str(e)}
+
+    return {
+        "patient_id": patient_id,
+        "message": "Patient created successfully",
+        "tasks_created": len(tasks_created),
+        "email_sent": email_result.get("success", False) if email_result else False,
+    }
 
 
 @app.get("/api/patients/{patient_id}")
@@ -175,8 +368,37 @@ async def get_patient(patient_id: str):
         raise HTTPException(status_code=404, detail="Patient not found")
 
     # Get patient notes (empty for new patients)
-    notes_cursor = db.patient_notes.find({"patient_id": patient_id, "tenant_id": tenant_id}).sort("created_at", -1).limit(50)
+    notes_cursor = (
+        db.patient_notes.find({"patient_id": patient_id, "tenant_id": tenant_id})
+        .sort("created_at", -1)
+        .limit(50)
+    )
     notes = await notes_cursor.to_list(length=50)
+
+    # Get tasks for this patient (exclude tasks marked as "done")
+    tasks_cursor = (
+        db.tasks.find(
+            {
+                "patient_id": patient_id,
+                "tenant_id": tenant_id,
+                "state": {"$ne": "done"},  # Exclude tasks with state "done"
+            }
+        )
+        .sort("created_at", -1)
+        .limit(50)
+    )
+    tasks = await tasks_cursor.to_list(length=50)
+
+    # Debug logging
+    print(f"DEBUG: Fetching tasks for patient_id: {patient_id}, tenant_id: {tenant_id}")
+    print(
+        f"DEBUG: Found {len(tasks)} active tasks for patient {patient_id} (excluding done tasks)"
+    )
+    if tasks:
+        for task in tasks:
+            print(
+                f"  - Task: {task.get('title')}, patient_id: {task.get('patient_id')}, state: {task.get('state')}"
+            )
 
     # Get AI summary from patient document (no caching)
     ai_summary = patient.get("ai_summary")
@@ -187,13 +409,17 @@ async def get_patient(patient_id: str):
         try:
             dob_date = datetime.strptime(patient["dob"], "%Y-%m-%d").date()
             today = datetime.now(timezone.utc).date()
-            age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+            age = (
+                today.year
+                - dob_date.year
+                - ((today.month, today.day) < (dob_date.month, dob_date.day))
+            )
         except:
             age = None
 
     # Get vitals and physical details
     latest_vitals = patient.get("latest_vitals", {})
-    
+
     return {
         "patient_id": patient["_id"],
         "mrn": patient["mrn"],
@@ -221,12 +447,36 @@ async def get_patient(patient_id: str):
         "notes": [
             {
                 "note_id": note["_id"],
-                "date": note.get("created_at", datetime.now(timezone.utc)).strftime("%Y-%m-%d"),
+                "date": note.get("created_at", datetime.now(timezone.utc)).strftime(
+                    "%Y-%m-%d"
+                ),
                 "author": note.get("author", "Unknown"),
                 "content": note.get("content", ""),
-                "created_at": note.get("created_at", datetime.now(timezone.utc)).isoformat(),
+                "created_at": note.get(
+                    "created_at", datetime.now(timezone.utc)
+                ).isoformat(),
             }
             for note in notes
+        ],
+        "tasks": [
+            {
+                "task_id": task["_id"],
+                "title": task.get("title", ""),
+                "description": task.get("description", ""),
+                "patient_name": task.get("patient_name"),
+                "assigned_to": task.get("assigned_to"),
+                "agent_type": task.get("agent_type"),
+                "priority": task.get("priority"),
+                "state": task.get("state"),
+                "confidence_score": task.get("confidence_score"),
+                "waiting_minutes": task.get("waiting_minutes", 0),
+                "created_at": (
+                    task.get("created_at", datetime.now(timezone.utc)).isoformat()
+                    if isinstance(task.get("created_at"), datetime)
+                    else task.get("created_at")
+                ),
+            }
+            for task in tasks
         ],
     }
 
@@ -247,15 +497,21 @@ async def get_patient_summary(patient_id: str):
         try:
             dob_date = datetime.strptime(patient["dob"], "%Y-%m-%d").date()
             today = datetime.now(timezone.utc).date()
-            age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+            age = (
+                today.year
+                - dob_date.year
+                - ((today.month, today.day) < (dob_date.month, dob_date.day))
+            )
         except:
             age = None
-    
+
     # Always generate summary (mock for now, in production would use AI)
     preconditions = patient.get("preconditions", [])
-    preconditions_text = ", ".join(preconditions) if preconditions else "no documented preconditions"
+    preconditions_text = (
+        ", ".join(preconditions) if preconditions else "no documented preconditions"
+    )
     age_text = f"{age}-year-old" if age else "patient"
-    
+
     # Generate a concise, 2-line high-quality clinical summary using OpenAI (GPT-4)
 
     from openai import AsyncOpenAI
@@ -265,18 +521,19 @@ async def get_patient_summary(patient_id: str):
     # Gather relevant info
     # (already collected: age, gender, preconditions, status)
     latest_appointment = await db.appointments.find_one(
-        {"patient_id": patient_id, "tenant_id": tenant_id},
-        sort=[("date", -1)]
+        {"patient_id": patient_id, "tenant_id": tenant_id}, sort=[("date", -1)]
     )
     latest_task = await db.tasks.find_one(
-        {"patient_id": patient_id, "tenant_id": tenant_id},
-        sort=[("created_at", -1)]
+        {"patient_id": patient_id, "tenant_id": tenant_id}, sort=[("created_at", -1)]
     )
-    
+
     is_new_patient = patient.get("status", "").lower() in ["intake in progress", "new"]
 
     stage = None
-    if is_new_patient or patient.get("status", "").lower() in ["intake in progress", "new"]:
+    if is_new_patient or patient.get("status", "").lower() in [
+        "intake in progress",
+        "new",
+    ]:
         stage = "intake"
     elif latest_appointment:
         stage = latest_appointment.get("type", "consultation")
@@ -285,11 +542,13 @@ async def get_patient_summary(patient_id: str):
     else:
         stage = patient.get("status", "Active").lower()
 
-    gender = patient.get('gender', 'Unknown')
-    condition = ', '.join(preconditions) if preconditions else 'no documented conditions'
-    status = patient.get('status', 'Active').lower()
-    first_name = patient.get('first_name', '')
-    last_name = patient.get('last_name', '')
+    gender = patient.get("gender", "Unknown")
+    condition = (
+        ", ".join(preconditions) if preconditions else "no documented conditions"
+    )
+    status = patient.get("status", "Active").lower()
+    first_name = patient.get("first_name", "")
+    last_name = patient.get("last_name", "")
 
     # Compose prompt for short summary
     summary_prompt = f"""Create a SHORT, high-quality, 2-line clinical summary for this patient, suitable for a busy medical team. Include age, gender, any relevant conditions, and their current consultation or intake stage, in clean natural language. If the patient is new, make it explicit.
@@ -303,14 +562,19 @@ Status: {status}
 """
 
     if is_new_patient:
-        summary_prompt += "The patient is new and currently undergoing the intake process.\n"
+        summary_prompt += (
+            "The patient is new and currently undergoing the intake process.\n"
+        )
 
     summary_prompt += "Summary (2 lines with important details that are needed for a doctor consultion):"
 
     summary_resp = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are a world-class clinical summarizer. Your summaries are concise, accurate, always ≤2 lines, and highlight age, gender, key conditions, and the current stage."},
+            {
+                "role": "system",
+                "content": "You are a world-class clinical summarizer. Your summaries are concise, accurate, always ≤2 lines, and highlight age, gender, key conditions, and the current stage.",
+            },
             {"role": "user", "content": summary_prompt},
         ],
         max_tokens=82,
@@ -326,7 +590,7 @@ Status: {status}
                 "ai_summary": summary_text,
                 "ai_summary_generated_at": datetime.now(timezone.utc),
             }
-        }
+        },
     )
 
     payload = {
@@ -598,15 +862,35 @@ async def list_tasks(
     query = {"tenant_id": tenant_id}
     if state:
         query["state"] = state
+    else:
+        # By default, exclude "done" tasks unless state is explicitly requested
+        query["state"] = {"$ne": "done"}
     if patient_id:
         query["patient_id"] = patient_id
+        # Debug logging
+        print(f"DEBUG: Filtering tasks by patient_id: {patient_id}")
     if assignee_id:
         query["assignee_id"] = assignee_id
     if priority:
         query["priority"] = priority
 
+    # Debug: Count total tasks and tasks matching query
+    total_tasks = await db.tasks.count_documents({"tenant_id": tenant_id})
+    matching_tasks = await db.tasks.count_documents(query)
+    print(
+        f"DEBUG: Total tasks in DB: {total_tasks}, Matching query: {matching_tasks}, Query: {query}"
+    )
+
     cursor = db.tasks.find(query).skip(skip).limit(limit).sort("created_at", -1)
     tasks = await cursor.to_list(length=limit)
+
+    # Debug: Log found tasks
+    if patient_id:
+        print(f"DEBUG: Found {len(tasks)} tasks for patient_id: {patient_id}")
+        for task in tasks:
+            print(
+                f"  - Task: {task.get('title')}, patient_id: {task.get('patient_id')}, state: {task.get('state')}"
+            )
 
     return [
         {
@@ -696,14 +980,14 @@ async def update_task(task_id: str, update_data: TaskUpdate):
     tenant_id = DEFAULT_TENANT
 
     update_operations = {}
-    
+
     # Handle $set operations
     set_fields = {}
     if update_data.state:
         set_fields["state"] = update_data.state
     set_fields["updated_at"] = datetime.now(timezone.utc)
     update_operations["$set"] = set_fields
-    
+
     # Handle $push operations
     if update_data.comment:
         update_operations["$push"] = {
@@ -722,6 +1006,70 @@ async def update_task(task_id: str, update_data: TaskUpdate):
         raise HTTPException(status_code=404, detail="Task not found")
 
     return {"message": "Task updated successfully"}
+
+
+@app.patch("/api/appointments/{appointment_id}")
+async def update_appointment(appointment_id: str, update_data: dict):
+    """Update appointment status and create insurance verification task if completed"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+
+    update_fields = {}
+    if update_data.get("status"):
+        update_fields["status"] = update_data["status"]
+    update_fields["updated_at"] = datetime.now(timezone.utc)
+
+    result = await db.appointments.update_one(
+        {"_id": appointment_id, "tenant_id": tenant_id}, {"$set": update_fields}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    # If appointment is marked as completed, create insurance verification task
+    if update_data.get("status") == "completed":
+        appointment = await db.appointments.find_one(
+            {"_id": appointment_id, "tenant_id": tenant_id}
+        )
+        if appointment:
+            patient = await db.patients.find_one(
+                {"_id": appointment["patient_id"], "tenant_id": tenant_id}
+            )
+            if patient:
+                patient_name = (
+                    f"{patient.get('first_name', '')} {patient.get('last_name', '')}"
+                )
+
+                # Create insurance verification task
+                task_id = str(uuid.uuid4())
+                insurance_task = {
+                    "_id": task_id,
+                    "task_id": f"T{random.randint(10000, 99999)}",
+                    "tenant_id": tenant_id,
+                    "source": "agent",
+                    "kind": "insurance_verification",
+                    "title": f"Verify Insurance Forms - {patient_name}",
+                    "description": f"Consultation completed for {patient_name}. Please verify insurance forms and coverage details.",
+                    "patient_id": appointment["patient_id"],
+                    "patient_name": patient_name,
+                    "assigned_to": "AI - Insurance Agent",
+                    "agent_type": "insurance",
+                    "priority": "high",
+                    "state": TaskState.OPEN,
+                    "confidence_score": 1.0,
+                    "waiting_minutes": 0,
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                    "created_by": "ai_agent",
+                }
+
+                await db.tasks.insert_one(insurance_task)
+                await db.patients.update_one(
+                    {"_id": appointment["patient_id"]}, {"$inc": {"tasks_count": 1}}
+                )
+                print(f"Insurance verification task created for patient {patient_name}")
+
+    return {"message": "Appointment updated successfully"}
 
 
 # ==================== CLAIM ROUTES ====================
@@ -980,7 +1328,8 @@ async def create_appointment(appointment_data: AppointmentCreate):
             # Fallback without transaction
             await db.appointments.insert_one(appointment)
             await db.patients.update_one(
-                {"_id": appointment_data.patient_id}, {"$inc": {"appointments_count": 1}}
+                {"_id": appointment_data.patient_id},
+                {"$inc": {"appointments_count": 1}},
             )
     except Exception as e:
         # Fallback without transaction if session fails
@@ -988,6 +1337,50 @@ async def create_appointment(appointment_data: AppointmentCreate):
         await db.patients.update_one(
             {"_id": appointment_data.patient_id}, {"$inc": {"appointments_count": 1}}
         )
+
+    # Send appointment confirmation email
+    try:
+        from composio_integration import send_appointment_scheduled_email
+
+        patient = await db.patients.find_one(
+            {"_id": appointment_data.patient_id, "tenant_id": tenant_id}
+        )
+        if patient:
+            patient_name = (
+                f"{patient.get('first_name', '')} {patient.get('last_name', '')}"
+            )
+            # Format appointment date and time
+            starts_at = appointment_data.starts_at
+            if isinstance(starts_at, datetime):
+                appointment_date = starts_at.strftime("%Y-%m-%d")
+                appointment_time = starts_at.strftime("%I:%M %p")
+            else:
+                # If it's a string, parse it
+                try:
+                    starts_at_dt = datetime.fromisoformat(
+                        str(starts_at).replace("Z", "+00:00")
+                    )
+                    appointment_date = starts_at_dt.strftime("%Y-%m-%d")
+                    appointment_time = starts_at_dt.strftime("%I:%M %p")
+                except:
+                    appointment_date = (
+                        str(starts_at).split("T")[0] if "T" in str(starts_at) else "TBD"
+                    )
+                    appointment_time = "TBD"
+
+            email_result = await send_appointment_scheduled_email(
+                patient_email=patient["contact"]["email"],
+                patient_name=patient_name,
+                date=appointment_date,
+                time=appointment_time,
+                type=appointment_data.type,
+                provider="Dr. James O'Brien",
+            )
+            print(
+                f"Appointment confirmation email sent: {email_result.get('success', False)}"
+            )
+    except Exception as e:
+        print(f"Warning: Failed to send appointment confirmation email: {e}")
 
     return {
         "appointment_id": appointment_id,
@@ -1057,18 +1450,25 @@ async def get_dashboard_appointments():
 
     result = []
     for apt in appointments:
-        result.append({
-            "appointment_id": apt["_id"],
-            "patient_name": apt.get("patient_name", "Unknown"),
-            "starts_at": apt["starts_at"].isoformat() if isinstance(apt["starts_at"], datetime) else apt["starts_at"],
-            "appointment_type": apt.get("appointment_type", "consultation"),
-            "provider_id": apt.get("provider_id"),
-        })
+        result.append(
+            {
+                "appointment_id": apt["_id"],
+                "patient_name": apt.get("patient_name", "Unknown"),
+                "starts_at": (
+                    apt["starts_at"].isoformat()
+                    if isinstance(apt["starts_at"], datetime)
+                    else apt["starts_at"]
+                ),
+                "appointment_type": apt.get("appointment_type", "consultation"),
+                "provider_id": apt.get("provider_id"),
+            }
+        )
 
     return result
 
 
 # ==================== CONSENT FORMS ROUTES ====================
+
 
 @app.get("/api/consent-forms")
 async def list_consent_forms(
@@ -1099,8 +1499,12 @@ async def list_consent_forms(
             "title": form.get("title"),
             "status": form.get("status"),
             "sent_at": form.get("sent_at").isoformat() if form.get("sent_at") else None,
-            "signed_at": form.get("signed_at").isoformat() if form.get("signed_at") else None,
-            "created_at": form.get("created_at").isoformat() if form.get("created_at") else None,
+            "signed_at": (
+                form.get("signed_at").isoformat() if form.get("signed_at") else None
+            ),
+            "created_at": (
+                form.get("created_at").isoformat() if form.get("created_at") else None
+            ),
         }
         for form in forms
     ]
@@ -1125,13 +1529,78 @@ async def list_form_templates():
     ]
 
 
+@app.post("/api/consent-forms/send")
+async def send_consent_forms(data: dict):
+    """Send consent forms email to patient and mark task as done"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+
+    patient_id = data.get("patient_id")
+    if not patient_id:
+        raise HTTPException(status_code=400, detail="patient_id is required")
+
+    # Get patient
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    patient_name = f"{patient.get('first_name', '')} {patient.get('last_name', '')}"
+    patient_email = patient["contact"]["email"]
+
+    # Send consent form email
+    try:
+        from composio_integration import send_consent_form_email
+
+        email_result = await send_consent_form_email(
+            patient_email=patient_email, patient_name=patient_name
+        )
+
+        # Find and mark consent email task as done
+        consent_task = await db.tasks.find_one(
+            {
+                "patient_id": patient_id,
+                "tenant_id": tenant_id,
+                "kind": "consent_forms",
+                "state": "open",
+            }
+        )
+
+        if consent_task and email_result.get("success"):
+            await db.tasks.update_one(
+                {"_id": consent_task["_id"], "tenant_id": tenant_id},
+                {"$set": {"state": "done", "updated_at": datetime.now(timezone.utc)}},
+            )
+            print(f"Consent email task marked as done")
+
+        return {
+            "success": email_result.get("success", False),
+            "message": (
+                "Consent forms email sent successfully"
+                if email_result.get("success")
+                else "Failed to send email"
+            ),
+            "email_result": email_result,
+        }
+    except Exception as e:
+        print(f"Error sending consent forms email: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to send consent forms email: {str(e)}"
+        )
+
+
 # ==================== MCP PROXY ROUTE ====================
 
-@app.api_route("/api/special/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+
+@app.api_route(
+    "/api/special/mcp/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+)
 async def special_mcp_proxy(request: Request, path: str = ""):
     """Simple proxy to MCP server on localhost:8002"""
-    target_url = f"http://localhost:8002/mcp/{path}" if path else "http://localhost:8002/mcp"
-    
+    target_url = (
+        f"http://localhost:8002/mcp/{path}" if path else "http://localhost:8002/mcp"
+    )
+
     async with httpx.AsyncClient() as client:
         response = await client.request(
             method=request.method,
@@ -1145,7 +1614,6 @@ async def special_mcp_proxy(request: Request, path: str = ""):
             status_code=response.status_code,
             headers=dict(response.headers),
         )
-
 
 
 # ==================== EMAIL ENDPOINTS (Temporarily Disabled) ====================
@@ -1175,15 +1643,15 @@ async def special_mcp_proxy(request: Request, path: str = ""):
 #         # Get patient details
 #         db = get_db()
 #         tenant_id = DEFAULT_TENANT
-#         
+#
 #         patient = await db.patients.find_one({
 #             "_id": patient_id,
 #             "tenant_id": tenant_id
 #         })
-#         
+#
 #         if not patient:
 #             raise HTTPException(status_code=404, detail="Patient not found")
-#         
+#
 #         # Send notification
 #         result = await send_patient_notification_email(
 #             patient_email=patient.get("email"),
@@ -1191,11 +1659,10 @@ async def special_mcp_proxy(request: Request, path: str = ""):
 #             notification_type=notification_data.get("type", "general"),
 #             details=notification_data.get("details", {})
 #         )
-#         
+#
 #         return result
 #     except HTTPException:
 #         raise
 #     except Exception as e:
 #         logger.error(f"Error sending patient notification: {str(e)}")
 #         raise HTTPException(status_code=500, detail=str(e))
-

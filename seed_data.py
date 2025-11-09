@@ -8,8 +8,8 @@ import os
 import random
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 
 load_dotenv()
@@ -709,7 +709,8 @@ async def seed_database():
             "description": "Medical consultation with diagnostic tests",
             "status": status,
             "last_event_at": datetime.now(timezone.utc),
-            "created_at": datetime.now(timezone.utc) - timedelta(days=random.randint(5, 25)),
+            "created_at": datetime.now(timezone.utc)
+            - timedelta(days=random.randint(5, 25)),
             "updated_at": datetime.now(timezone.utc),
         }
         await db.claims.insert_one(claim)
@@ -754,4 +755,3 @@ async def seed_database():
 
 if __name__ == "__main__":
     asyncio.run(seed_database())
-

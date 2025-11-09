@@ -11,6 +11,7 @@ import { useChat, useCopilotContext } from '../context/ChatContext';
 import { toast } from 'sonner';
 import Header from '../components/Header';
 import SendFormsModal from '../components/SendFormsModal';
+import CreateTaskModal from '../components/CreateTaskModal';
 import { apiService } from '../services/api';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
@@ -25,6 +26,7 @@ const PatientDetailsPage = ({ params }) => {
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [showSendFormsModal, setShowSendFormsModal] = useState(false);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [patientSummary, setPatientSummary] = useState(null);
   const [patientTasks, setPatientTasks] = useState([]);
   const [patientAppointments, setPatientAppointments] = useState([]);
@@ -43,10 +45,9 @@ const PatientDetailsPage = ({ params }) => {
     setLoading(true);
     try {
       // Fetch all patient-related data in parallel
-      const [patientRes, summaryRes, tasksRes, appointmentsRes, documentsRes] = await Promise.allSettled([
+      const [patientRes, summaryRes, appointmentsRes, documentsRes] = await Promise.allSettled([
         axios.get(`${API}/patients/${patientId}`),
         apiService.getPatientSummary(patientId).catch(() => null),
-        apiService.getTasks({ patient_id: patientId }).catch(() => ({ data: [] })),
         apiService.getAppointments({ patient_id: patientId }).catch(() => ({ data: [] })),
         apiService.getDocuments({ patient_id: patientId }).catch(() => ({ data: [] })),
       ]);
@@ -56,14 +57,13 @@ const PatientDetailsPage = ({ params }) => {
         setPatient(patientData);
         // Notes are included in patient data
         setPatientNotes(patientData.notes || []);
+        // Tasks are included in patient data - filter out "done" tasks
+        const activeTasks = (patientData.tasks || []).filter(task => task.state !== 'done');
+        setPatientTasks(activeTasks);
       }
 
       if (summaryRes.status === 'fulfilled' && summaryRes.value) {
         setPatientSummary(summaryRes.value.data);
-      }
-
-      if (tasksRes.status === 'fulfilled') {
-        setPatientTasks(tasksRes.value.data || []);
       }
 
       if (appointmentsRes.status === 'fulfilled') {
@@ -235,7 +235,21 @@ const PatientDetailsPage = ({ params }) => {
         isOpen={showSendFormsModal}
         onClose={() => setShowSendFormsModal(false)}
         patientEmail={patient?.email}
+        patientId={patientId}
         availableForms={availableForms}
+        onSuccess={fetchPatientData}
+      />
+      <CreateTaskModal
+        isOpen={showCreateTaskModal}
+        onClose={() => setShowCreateTaskModal(false)}
+        prefilledData={{
+          patientId: patientId,
+          name: `Call Patient - ${patient?.first_name} ${patient?.last_name}`,
+          description: `Follow up call with ${patient?.first_name} ${patient?.last_name} (${patient?.phone}). Discuss treatment plan, answer questions, and address any concerns.`,
+          assignedTo: "Dr. James O'Brien",
+          priority: "medium"
+        }}
+        onSuccess={fetchPatientData}
       />
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-8 py-6">
@@ -260,7 +274,11 @@ const PatientDetailsPage = ({ params }) => {
                     <Mail className="w-3.5 h-3.5" />
                     {patient.email}
                   </span>
-                  <button onClick={openChat} className="flex items-center gap-1 hover:text-gray-900 transition-colors" title="Ask AI about this patient">
+                  <button 
+                    onClick={() => setShowCreateTaskModal(true)} 
+                    className="flex items-center gap-1 hover:text-gray-900 transition-colors" 
+                    title="Create task to talk to patient"
+                  >
                     <Phone className="w-3.5 h-3.5" />
                     {patient.phone}
                   </button>

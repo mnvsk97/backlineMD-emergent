@@ -183,7 +183,10 @@ const DashboardPage = () => {
                           <p className="font-medium text-gray-900 text-sm">{apt.patient_name}</p>
                           <p className="text-xs text-gray-600 mt-0.5">{formatAppointmentType(apt.appointment_type || apt.type)}</p>
                         </div>
-                        <button className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors text-xs font-medium">
+                        <button 
+                          onClick={() => window.open('https://meet.google.com', '_blank')}
+                          className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors text-xs font-medium"
+                        >
                           Join
                         </button>
                       </div>
