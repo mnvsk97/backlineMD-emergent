@@ -4,6 +4,7 @@ import { DollarSign, Mail, Phone, Calendar, CheckCircle, XCircle, Clock } from '
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
+import CreateTaskModal from '../components/CreateTaskModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
