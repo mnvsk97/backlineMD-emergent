@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { CheckSquare, User, Clock, AlertTriangle } from 'lucide-react';
+import { CheckSquare, User, Clock, AlertTriangle, Plus } from 'lucide-react';
 import { Card } from '../components/ui/card';
+import TaskDetailModal from '../components/TaskDetailModal';
+import CreateTaskModal from '../components/CreateTaskModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -9,9 +11,14 @@ const API = `${BACKEND_URL}/api`;
 const TasksPage = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchTasks();
+    const interval = setInterval(fetchTasks, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchTasks = async () => {
