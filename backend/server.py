@@ -47,24 +47,18 @@ async def shutdown_event():
     await close_db()
     print("\u2713 BacklineMD API stopped")
 
-# ==================== AUTH DEPENDENCY ====================
+# ==================== NO AUTH - HACKATHON MODE ====================
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    x_tenant_id: Optional[str] = Header(None)
-):
-    token = credentials.credentials
-    payload = decode_token(token)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    
-    user_id = payload.get("user_id")
-    tenant_id = payload.get("tenant_id") or x_tenant_id
-    
-    if not user_id or not tenant_id:
-        raise HTTPException(status_code=401, detail="Invalid token payload")
-    
-    return {"user_id": user_id, "tenant_id": tenant_id, "email": payload.get("email")}
+# Default tenant for hackathon
+DEFAULT_TENANT = "hackathon-demo"
+
+async def get_current_user():
+    """No auth required for hackathon"""
+    return {
+        "user_id": "demo-user",
+        "tenant_id": DEFAULT_TENANT,
+        "email": "demo@backlinemd.com"
+    }
 
 # ==================== HELPER FUNCTIONS ====================
 
