@@ -17,11 +17,10 @@ async def connect_db():
     # Configure SSL/TLS options for MongoDB Atlas
     ssl_options = {}
     if "mongodb+srv://" in MONGO_URL or "ssl=true" in MONGO_URL.lower() or "tls=true" in MONGO_URL.lower():
-        import ssl
         ssl_options = {
             "tls": True,
-            "tlsAllowInvalidCertificates": True,
-            "ssl_cert_reqs": ssl.CERT_NONE
+            "tlsCAFile": certifi.where(),
+            "serverSelectionTimeoutMS": 30000
         }
     
     client = AsyncIOMotorClient(
