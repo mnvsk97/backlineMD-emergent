@@ -12,8 +12,6 @@ from fastapi import (
     FastAPI,
     File,
     HTTPException,
-    Request,
-    Response,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,10 +23,7 @@ load_dotenv(ROOT_DIR / ".env")
 # Import our modules
 from database import close_db, connect_db, get_db
 from logger import (
-    get_logger,
-    log_api_error,
-    log_api_request,
-    log_database_operation,
+    get_logger
 )
 from models import *
 
@@ -42,6 +37,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     await connect_db()
+    
     logger.info("BacklineMD API started successfully")
     yield
     # Shutdown
@@ -61,88 +57,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# CopilotKit endpoint with LangGraph streaming
-from fastapi.responses import StreamingResponse
-import httpx
-import json
+# CopilotKit integration will be registered in lifespan handler
+# (moved there because graph initialization is async)
 
-@app.post("/api/copilot")
-async def copilotkit_endpoint(request: Request):
-    """CopilotKit endpoint that connects to remote LangGraph server"""
-    try:
-        # Get the request body
-        body = await request.json()
-        
-        # Extract the messages from CopilotKit request
-        messages = body.get("messages", [])
-        thread_id = body.get("threadId")
-        
-        logger.info(f"CopilotKit request - Messages: {len(messages)}, ThreadId: {thread_id}")
-        
-        # Forward to LangGraph
-        langgraph_url = "http://127.0.0.1:2024"
-        
-        # Create or get thread
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            # Create thread if needed
-            if not thread_id:
-                thread_response = await client.post(
-                    f"{langgraph_url}/threads",
-                    json={"metadata": {"source": "copilotkit"}}
-                )
-                thread_data = thread_response.json()
-                thread_id = thread_data.get("thread_id")
-                logger.info(f"Created new thread: {thread_id}")
-            
-            # Send message to LangGraph
-            if messages:
-                last_message = messages[-1]
-                message_content = last_message.get("content", "")
-                
-                # Invoke the agent with streaming
-                async def generate():
-                    try:
-                        # Start the run
-                        async with client.stream(
-                            "POST",
-                            f"{langgraph_url}/threads/{thread_id}/runs/stream",
-                            json={
-                                "assistant_id": "orchestrator",
-                                "input": {"messages": [{"role": "user", "content": message_content}]},
-                                "stream_mode": "messages",
-                            },
-                            timeout=120.0
-                        ) as response:
-                            # Stream the events
-                            async for line in response.aiter_lines():
-                                if line.startswith("data: "):
-                                    event_data = line[6:]  # Remove "data: " prefix
-                                    if event_data.strip():
-                                        try:
-                                            data = json.loads(event_data)
-                                            # Forward the event to CopilotKit
-                                            yield f"data: {json.dumps(data)}\n\n"
-                                        except json.JSONDecodeError:
-                                            continue
-                    except Exception as e:
-                        logger.error(f"Streaming error: {str(e)}")
-                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
-                
-                return StreamingResponse(
-                    generate(),
-                    media_type="text/event-stream",
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "Connection": "keep-alive",
-                        "X-Accel-Buffering": "no",
-                    }
-                )
-        
-        return {"threadId": thread_id, "messages": []}
-        
-    except Exception as e:
-        logger.error(f"CopilotKit endpoint error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== HELPER FUNCTIONS ====================

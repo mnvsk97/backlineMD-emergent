@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@copilotkit/react-core": "^1.10.6",
-    "@copilotkit/react-ui": "^1.10.6",
+    "@ag-ui/client": "^0.0.37",
+    "@ag-ui/langgraph": "0.0.18",
+    "@copilotkit/react-core": "1.10.6",
+    "@copilotkit/react-ui": "1.10.6",
+    "@copilotkit/runtime": "1.10.6",
     "@radix-ui/react-accordion": "^1.2.8",
     "@radix-ui/react-alert-dialog": "^1.1.11",
     "@radix-ui/react-checkbox": "^1.2.3",
@@ -22,42 +25,30 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.507.0",
+    "next": "^15.1.6",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.56.2",
-    "react-router-dom": "^7.5.1",
-    "react-scripts": "^5.0.1",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
     "tailwindcss-animate": "^1.0.7"
   },
   "scripts": {
-    "start": "craco start",
-    "build": "craco build",
-    "test": "craco test"
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "devDependencies": {
-    "@craco/craco": "^7.1.0",
-    "@eslint/js": "9.23.0",
+    "@eslint/js": "^9.23.0",
     "autoprefixer": "^10.4.20",
-    "eslint": "9.23.0",
-    "eslint-plugin-import": "2.31.0",
-    "eslint-plugin-jsx-a11y": "6.10.2",
-    "eslint-plugin-react": "7.37.4",
-    "globals": "15.15.0",
+    "eslint": "^9.23.0",
+    "eslint-config-next": "^15.1.6",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.4",
+    "globals": "^15.15.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17"
   },

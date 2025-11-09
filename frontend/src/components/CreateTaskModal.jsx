@@ -1,10 +1,12 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { X } from 'lucide-react';
 import { Card } from './ui/card';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
 
 const CreateTaskModal = ({ isOpen, onClose, prefilledData = {} }) => {

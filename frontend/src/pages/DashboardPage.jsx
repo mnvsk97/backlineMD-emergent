@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { FileCheck, Calendar, Clock, User, AlertTriangle } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
@@ -8,7 +10,7 @@ import { apiService } from '../services/api';
 import { toast } from 'sonner';
 
 const DashboardPage = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { openChat } = useChat();
   const [tasks, setTasks] = useState([]);
   const [patients, setPatients] = useState([]);
@@ -81,7 +83,7 @@ const DashboardPage = () => {
                   </span>
                 </div>
                 <button 
-                  onClick={() => navigate('/tasks')}
+                  onClick={() => router.push('/tasks')}
                   className="text-sm text-purple-600 hover:text-purple-700 transition-colors font-medium"
                 >
                   View all →
@@ -106,7 +108,7 @@ const DashboardPage = () => {
                     <Card
                       key={task.task_id}
                       className="p-4 border-l-4 border-purple-400 hover:border-purple-500 bg-white hover:shadow-md transition-all cursor-pointer"
-                      onClick={() => navigate('/tasks')}
+                      onClick={() => router.push('/tasks')}
                     >
                       <div className="flex items-start gap-4">
                         <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">

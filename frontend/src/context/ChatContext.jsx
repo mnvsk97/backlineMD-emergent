@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useCopilotReadable } from '@copilotkit/react-core';
 

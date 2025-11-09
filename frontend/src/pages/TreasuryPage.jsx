@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { DollarSign, Mail, Phone, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Card } from '../components/ui/card';
@@ -46,14 +48,51 @@ const TreasuryPage = () => {
     return () => clearInterval(interval);
   }, [fetchClaims]);
 
-  // Provide all claims context to CopilotKit
+  // Provide comprehensive claims context to CopilotKit
   useCopilotContext({
     page: 'treasury',
-    claims: claims,
-    count: claims.length,
-    filters: ['all', 'pending', 'approved', 'denied'],
-    summary: `Treasury claims page showing ${claims.length} insurance claims with various statuses.`
-  }, 'All insurance claims with details, amounts, and patient information');
+    pageType: 'insurance_claims',
+    claims: claims.map(c => ({
+      id: c.claim_id,
+      patientId: c.patient_id,
+      patientName: c.patient_name,
+      amount: c.amount,
+      status: c.status,
+      submittedDate: c.submitted_date,
+      insuranceProvider: c.insurance_provider,
+      claimType: c.claim_type,
+      description: c.description,
+    })),
+    totalClaims: claims.length,
+    totalAmount: claims.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0),
+    claimsByStatus: claims.reduce((acc, c) => {
+      const status = c.status?.toLowerCase() || 'unknown';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {}),
+    amountByStatus: claims.reduce((acc, c) => {
+      const status = c.status?.toLowerCase() || 'unknown';
+      acc[status] = (acc[status] || 0) + (parseFloat(c.amount) || 0);
+      return acc;
+    }, {}),
+    pendingClaims: claims.filter(c => {
+      const status = c.status?.toLowerCase() || '';
+      return ['pending', 'submitted', 'under_review'].includes(status);
+    }).length,
+    approvedClaims: claims.filter(c => c.status?.toLowerCase() === 'approved').length,
+    deniedClaims: claims.filter(c => c.status?.toLowerCase() === 'denied').length,
+    statistics: {
+      pendingAmount: claims.filter(c => {
+        const status = c.status?.toLowerCase() || '';
+        return ['pending', 'submitted', 'under_review'].includes(status);
+      }).reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0),
+      approvedAmount: claims.filter(c => c.status?.toLowerCase() === 'approved')
+        .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0),
+      deniedAmount: claims.filter(c => c.status?.toLowerCase() === 'denied')
+        .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0),
+    },
+    summary: `Treasury/Insurance page with ${claims.length} total claims worth $${claims.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toFixed(2)}. ${claims.filter(c => ['pending', 'submitted', 'under_review'].includes(c.status?.toLowerCase() || '')).length} claims are pending review, ${claims.filter(c => c.status?.toLowerCase() === 'approved').length} are approved, and ${claims.filter(c => c.status?.toLowerCase() === 'denied').length} are denied.`
+  }, 'Complete insurance claims information including all claim details, amounts, statuses, patient information, and financial statistics');
 
   const filteredClaims = claims.filter(claim => {
     if (filter === 'all') return true;

@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { Search, Bell, User } from 'lucide-react';
 

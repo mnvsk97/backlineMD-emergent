@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Clock, User, AlertTriangle, CheckCircle, XCircle, Plus } from 'lucide-react';
 import { Card } from '../components/ui/card';

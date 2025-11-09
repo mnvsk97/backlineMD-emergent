@@ -14,7 +14,7 @@ The application follows a three-tier architecture:
 
 ### Technology Stack
 
-- **Frontend**: React 19, React Router, CopilotKit, TailwindCSS, Radix UI
+- **Frontend**: Next.js 15, React 19, CopilotKit, TailwindCSS, Radix UI
 - **Backend**: FastAPI, Motor (MongoDB async driver), Pydantic
 - **Agents**: LangGraph, DeepAgents, LangChain, FastMCP
 - **Database**: MongoDB
@@ -66,7 +66,7 @@ FastAPI application providing REST API endpoints for:
 - `GET /api/dashboard/appointments` - Get today's appointments
 
 #### Copilot
-- `POST /api/copilot` - Simple CopilotKit endpoint (placeholder)
+- `POST /api/copilotkit` - CopilotKit runtime endpoint (Next.js API route)
 
 ### Models (`models.py`)
 
@@ -134,57 +134,80 @@ MongoDB connection management with:
 
 ### Application Structure
 
-React application with:
-- **Routing**: React Router (Dashboard, Patients, Patient Details, Tasks, Treasury)
+Next.js 15 application with App Router:
+- **Framework**: Next.js 15 with App Router
+- **Routing**: Next.js file-based routing (app directory)
 - **UI Components**: Radix UI components (shadcn/ui style)
 - **Styling**: TailwindCSS
 - **State Management**: React Context (`ChatContext`)
-- **AI Integration**: CopilotKit for chat interface
+- **AI Integration**: CopilotKit with LangGraph integration via Next.js API routes
+
+### Next.js Architecture
+
+- **App Router**: Uses Next.js 15 App Router (`app/` directory)
+- **API Routes**: CopilotKit runtime endpoint at `/app/api/copilotkit/route.js`
+- **Client Components**: Pages and components marked with `'use client'` directive
+- **Server Components**: Layout and static components
+- **Path Aliases**: `@/` alias configured for `src/` directory
 
 ### Pages
 
-1. **DashboardPage** (`pages/DashboardPage.jsx`)
+1. **DashboardPage** (`src/pages/DashboardPage.jsx` → `app/page.js`)
    - Displays statistics (pending tasks, appointments today, total patients, pending claims)
    - Shows today's appointments
    - Quick actions
+   - Provides dashboard context to CopilotKit
 
-2. **PatientsPage** (`pages/PatientsPage.jsx`)
+2. **PatientsPage** (`src/pages/PatientsPage.jsx` → `app/patients/page.js`)
    - Patient list with search
    - Create patient modal
    - Patient cards with status, task counts, appointment counts
+   - Provides comprehensive patient list context to CopilotKit
 
-3. **PatientDetailsPage** (`pages/PatientDetailsPage.jsx`)
+3. **PatientDetailsPage** (`src/pages/PatientDetailsPage.jsx` → `app/patients/[patientId]/page.js`)
    - Patient profile information
    - Documents list
    - Tasks list
    - Appointments list
    - Patient summary (AI-generated)
+   - Provides complete patient context including tasks, appointments, documents, and notes to CopilotKit
 
-4. **TasksPage** (`pages/TasksPage.jsx`)
+4. **TasksPage** (`src/pages/TasksPage.jsx` → `app/tasks/page.js`)
    - Task list with filtering
    - Create task modal
    - Task status management
+   - Provides task context to CopilotKit
 
-5. **TreasuryPage** (`pages/TreasuryPage.jsx`)
+5. **TreasuryPage** (`src/pages/TreasuryPage.jsx` → `app/treasury/page.js`)
    - Insurance claims list
    - Claim details modal with event timeline
    - Create claim modal
+   - Provides comprehensive insurance claims context to CopilotKit
 
 ### Components
 
+- **Providers** (`src/components/Providers.jsx`) - Client-side providers wrapper (CopilotKit, ChatProvider)
 - **CopilotChatPopup** - CopilotKit chat interface
 - **CreatePatientModal** - Patient creation form
 - **CreateTaskModal** - Task creation form
 - **CreateClaimModal** - Claim creation form
 - **ClaimDetailModal** - Claim details with event timeline
 - **SendFormsModal** - Consent form sending interface
-- **Sidebar** - Navigation sidebar
+- **Sidebar** - Navigation sidebar with Next.js Link
 - **Header** - Application header
+
+### CopilotKit Integration
+
+- **Runtime**: Next.js API route at `/app/api/copilotkit/route.js`
+- **Agent**: Connects to LangGraph orchestrator agent
+- **Context**: Each page provides comprehensive context to CopilotKit via `useCopilotContext` hook
+- **Configuration**: Uses `@ag-ui/langgraph` and `@copilotkit/runtime` packages
+- **Environment**: `NEXT_PUBLIC_LANGGRAPH_DEPLOYMENT_URL` for LangGraph server connection
 
 ### API Service (`services/api.js`)
 
 Axios-based API client with:
-- Base URL configuration (`REACT_APP_BACKEND_URL`)
+- Base URL configuration (`NEXT_PUBLIC_BACKEND_URL`)
 - Endpoints for all backend routes
 - Error handling
 
@@ -418,12 +441,15 @@ Markdown files containing system prompts for each sub-agent:
 - Dashboard statistics
 
 ✅ **Frontend**:
-- React application with routing
+- Next.js 15 application with App Router
+- React 19 with client components
 - Patient management UI
 - Task management UI
 - Claim management UI
 - Dashboard with statistics
-- CopilotKit integration (basic)
+- CopilotKit integration with LangGraph
+- Context-aware chat (provides page-specific context)
+- Next.js API route for CopilotKit runtime
 
 ✅ **Agents**:
 - Orchestrator agent with sub-agent delegation
@@ -444,7 +470,6 @@ Markdown files containing system prompts for each sub-agent:
 - Google Calendar integration is mocked
 - DocuSign integration is mocked
 - File uploads don't actually store files (metadata only)
-- CopilotKit endpoint is a placeholder
 - No actual authentication/authorization (uses `DEFAULT_TENANT`)
 - No real AI model integration in backend (uses mock data)
 
@@ -464,13 +489,16 @@ Markdown files containing system prompts for each sub-agent:
 **Environment Variables**:
 - `MONGO_URL` - MongoDB connection string (default: `mongodb://localhost:27017`)
 - `DEFAULT_TENANT` - Tenant ID for multi-tenancy (default: `"hackathon-demo"`)
-- `REACT_APP_BACKEND_URL` - Backend API URL (default: `http://localhost:8001`)
+- `NEXT_PUBLIC_BACKEND_URL` - Backend API URL (default: `http://localhost:8001`)
+- `NEXT_PUBLIC_LANGGRAPH_DEPLOYMENT_URL` - LangGraph server URL (default: `http://localhost:2024`)
+- `LANGSMITH_API_KEY` - Optional LangSmith API key for tracing
 - OpenAI API key (for agents) - should be in `.env`
 
 **Ports**:
 - Backend API: `8001` (default FastAPI port)
 - MCP Server: `8002`
-- Frontend: `3000` (default React dev server)
+- LangGraph Server: `2024` (default LangGraph dev server)
+- Frontend: `3000` (default Next.js dev server)
 
 ## Dependencies
 
@@ -489,9 +517,10 @@ Single requirements file at root level shared by both backend and agents:
 - LangChain MCP Adapters
 
 ### Frontend (`frontend/package.json`)
+- Next.js 15.1.6
 - React 19
-- React Router 7
-- CopilotKit
+- CopilotKit (@copilotkit/react-core, @copilotkit/react-ui, @copilotkit/runtime)
+- @ag-ui/langgraph and @ag-ui/client for LangGraph integration
 - Radix UI components
 - TailwindCSS
 - Axios
@@ -514,12 +543,24 @@ backlineMD-emergent/
 │   ├── doc_extraction.md
 │   ├── insurance.md
 │   └── care_taker.md
-├── frontend/         # React frontend application
+├── frontend/         # Next.js frontend application
+│   ├── app/          # Next.js App Router
+│   │   ├── api/      # API routes
+│   │   └── copilotkit/  # CopilotKit runtime endpoint
+│   │   ├── page.js   # Dashboard page
+│   │   ├── patients/ # Patient pages
+│   │   ├── tasks/    # Tasks page
+│   │   ├── treasury/ # Treasury page
+│   │   ├── layout.js # Root layout
+│   │   └── styles/   # Global styles
 │   ├── src/
-│   │   ├── pages/    # Page components
+│   │   ├── pages/    # Page components (used by app router)
 │   │   ├── components/  # UI components
+│   │   ├── context/  # React context providers
 │   │   ├── services/    # API client
 │   │   └── ...
+│   ├── next.config.js  # Next.js configuration
+│   ├── tailwind.config.js  # Tailwind configuration
 │   └── package.json
 ├── tests/            # Test files (placeholder)
 ├── seed_data.py      # Database seeding script

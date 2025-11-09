@@ -2,8 +2,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*", "./app/*"]
     }
   },
-  "include": ["src"]
+  "exclude": ["node_modules", ".next"]
 }

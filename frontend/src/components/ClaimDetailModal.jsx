@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { X, Calendar, DollarSign, FileText, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { Card } from './ui/card';

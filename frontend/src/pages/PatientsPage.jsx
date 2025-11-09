@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Mail, Phone, Flag, Plus } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
@@ -9,7 +11,7 @@ import { apiService } from '../services/api';
 import { toast } from 'sonner';
 
 const PatientsPage = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { openChat } = useChat();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,13 +43,30 @@ const PatientsPage = () => {
     setSearchQuery(e.target.value);
   };
 
-  // Provide all patients context to CopilotKit
+  // Provide comprehensive patients context to CopilotKit
   useCopilotContext({
     page: 'patients',
-    patients: patients,
-    count: patients.length,
-    summary: `Patient list page showing ${patients.length} patients with their details, status, and task counts.`
-  }, 'All patients list with complete information');
+    pageType: 'patient_list',
+    patients: patients.map(p => ({
+      id: p.patient_id,
+      name: `${p.first_name} ${p.last_name}`,
+      email: p.email,
+      phone: p.phone,
+      status: p.status,
+      tasksCount: p.tasks_count || 0,
+      appointmentsCount: p.appointments_count || 0,
+      flaggedCount: p.flagged_count || 0,
+    })),
+    totalPatients: patients.length,
+    patientsByStatus: patients.reduce((acc, p) => {
+      acc[p.status] = (acc[p.status] || 0) + 1;
+      return acc;
+    }, {}),
+    totalTasks: patients.reduce((sum, p) => sum + (p.tasks_count || 0), 0),
+    totalAppointments: patients.reduce((sum, p) => sum + (p.appointments_count || 0), 0),
+    flaggedPatients: patients.filter(p => (p.flagged_count || 0) > 0).length,
+    summary: `Patient list page with ${patients.length} total patients. ${patients.filter(p => (p.tasks_count || 0) > 0).length} patients have pending tasks, ${patients.filter(p => (p.flagged_count || 0) > 0).length} patients are flagged for attention.`
+  }, 'Complete patient list with all patient details, statuses, task counts, and appointment information');
 
   const getStatusColor = (status) => {
     const colors = {
@@ -120,7 +139,7 @@ const PatientsPage = () => {
               {patients.map((patient) => (
                 <Card
                   key={patient.patient_id}
-                  onClick={() => navigate(`/patients/${patient.patient_id}`)}
+                  onClick={() => router.push(`/patients/${patient.patient_id}`)}
                   className="p-6 hover:shadow-lg transition-all cursor-pointer bg-white border border-gray-200"
                 >
                   <div className="flex items-start justify-between">

@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { ArrowLeft, Mail, Phone, Calendar, Activity, FileText, Heart, Ruler, Weight, Droplet, Clock, Plus, Send, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Card } from '../components/ui/card';
@@ -9,38 +11,83 @@ import { useChat, useCopilotContext } from '../context/ChatContext';
 import { toast } from 'sonner';
 import Header from '../components/Header';
 import SendFormsModal from '../components/SendFormsModal';
+import { apiService } from '../services/api';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
 
-const PatientDetailsPage = () => {
-  const { patientId } = useParams();
-  const navigate = useNavigate();
+const PatientDetailsPage = ({ params }) => {
+  const patientId = params?.patientId;
+  const router = useRouter();
   const { openChat } = useChat();
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [showSendFormsModal, setShowSendFormsModal] = useState(false);
+  const [patientSummary, setPatientSummary] = useState(null);
+  const [patientTasks, setPatientTasks] = useState([]);
+  const [patientAppointments, setPatientAppointments] = useState([]);
+  const [patientDocuments, setPatientDocuments] = useState([]);
+  const [patientNotes, setPatientNotes] = useState([]);
 
   useEffect(() => {
-    fetchPatient();
+    if (patientId) {
+      fetchPatientData();
+    }
   }, [patientId]);
 
-  const fetchPatient = async () => {
+  const fetchPatientData = async () => {
+    setLoading(true);
     try {
-      const response = await axios.get(`${API}/patients/${patientId}`);
-      setPatient(response.data);
+      // Fetch all patient-related data in parallel
+      const [patientRes, summaryRes, tasksRes, appointmentsRes, documentsRes] = await Promise.allSettled([
+        axios.get(`${API}/patients/${patientId}`),
+        apiService.getPatientSummary(patientId).catch(() => null),
+        apiService.getTasks({ patient_id: patientId }).catch(() => ({ data: [] })),
+        apiService.getAppointments({ patient_id: patientId }).catch(() => ({ data: [] })),
+        apiService.getDocuments({ patient_id: patientId }).catch(() => ({ data: [] })),
+      ]);
+
+      if (patientRes.status === 'fulfilled') {
+        setPatient(patientRes.value.data);
+      }
+
+      if (summaryRes.status === 'fulfilled' && summaryRes.value) {
+        setPatientSummary(summaryRes.value.data);
+      }
+
+      if (tasksRes.status === 'fulfilled') {
+        setPatientTasks(tasksRes.value.data || []);
+      }
+
+      if (appointmentsRes.status === 'fulfilled') {
+        setPatientAppointments(appointmentsRes.value.data || []);
+      }
+
+      if (documentsRes.status === 'fulfilled') {
+        setPatientDocuments(documentsRes.value.data || []);
+      }
+
+      // Fetch notes if endpoint exists
+      try {
+        const notesRes = await axios.get(`${API}/patients/${patientId}/notes`);
+        setPatientNotes(notesRes.data || []);
+      } catch (error) {
+        // Notes endpoint might not exist, that's okay
+        console.log('Notes endpoint not available');
+      }
     } catch (error) {
-      console.error('Error fetching patient:', error);
+      console.error('Error fetching patient data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Provide detailed patient context to CopilotKit
+  // Provide comprehensive patient context to CopilotKit
   useCopilotContext(patient ? {
     page: 'patient_details',
+    pageType: 'patient_detail',
     patient: {
       id: patient.patient_id,
       name: `${patient.first_name} ${patient.last_name}`,
@@ -49,11 +96,46 @@ const PatientDetailsPage = () => {
       status: patient.status,
       age: patient.age,
       gender: patient.gender,
-      tasks: patient.tasks_count,
-      appointments: patient.appointments_count,
+      dateOfBirth: patient.date_of_birth,
+      address: patient.address,
     },
-    summary: `Detailed view of patient ${patient.first_name} ${patient.last_name}, status: ${patient.status}, with ${patient.tasks_count} tasks and ${patient.appointments_count} appointments.`
-  } : null, 'Complete patient details including medical history, status, and activity');
+    summary: patientSummary || `Patient ${patient.first_name} ${patient.last_name} is currently in ${patient.status} status.`,
+    tasks: patientTasks.map(t => ({
+      id: t.task_id,
+      title: t.title,
+      description: t.description,
+      status: t.status,
+      priority: t.priority,
+      agentType: t.agent_type,
+      confidenceScore: t.confidence_score,
+    })),
+    appointments: patientAppointments.map(a => ({
+      id: a.appointment_id,
+      date: a.starts_at || a.date,
+      type: a.appointment_type || a.type,
+      status: a.status,
+    })),
+    documents: patientDocuments.map(d => ({
+      id: d.document_id,
+      kind: d.kind,
+      title: d.title,
+      uploadedAt: d.uploaded_at,
+    })),
+    notes: patientNotes.map(n => ({
+      date: n.date || n.created_at,
+      author: n.author,
+      content: n.content,
+    })),
+    statistics: {
+      totalTasks: patientTasks.length,
+      totalAppointments: patientAppointments.length,
+      totalDocuments: patientDocuments.length,
+      totalNotes: patientNotes.length,
+      pendingTasks: patientTasks.filter(t => t.status === 'pending').length,
+      urgentTasks: patientTasks.filter(t => t.priority === 'urgent').length,
+    },
+    fullSummary: `Patient ${patient.first_name} ${patient.last_name} (${patient.age} years old, ${patient.gender}) is in ${patient.status} status. Has ${patientTasks.length} tasks (${patientTasks.filter(t => t.priority === 'urgent').length} urgent), ${patientAppointments.length} appointments, ${patientDocuments.length} documents, and ${patientNotes.length} clinical notes.`
+  } : null, 'Complete patient details including all medical information, tasks, appointments, documents, notes, and summary');
 
   const handleSaveNote = async () => {
     if (!newNote.trim()) {
@@ -70,6 +152,8 @@ const PatientDetailsPage = () => {
       });
       toast.success('Note saved successfully!');
       setNewNote('');
+      // Refresh patient data to include new note
+      fetchPatientData();
     } catch (error) {
       console.error('Error saving note:', error);
       toast.error('Failed to save note');
@@ -91,7 +175,7 @@ const PatientDetailsPage = () => {
       <div className="h-full flex flex-col items-center justify-center">
         <p className="text-gray-600 mb-4">Patient not found</p>
         <button
-          onClick={() => navigate('/patients')}
+          onClick={() => router.push('/patients')}
           className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
         >
           Back to Patients
@@ -139,7 +223,7 @@ const PatientDetailsPage = () => {
       />
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-8 py-6">
-          <button onClick={() => navigate('/patients')} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4">
+          <button onClick={() => router.push('/patients')} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4">
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm font-medium">Back to Patients</span>
           </button>

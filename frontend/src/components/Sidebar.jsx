@@ -1,8 +1,12 @@
+'use client';
+
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Activity, Users, ClipboardList, Briefcase } from 'lucide-react';
 
 const Sidebar = () => {
+  const pathname = usePathname();
   const navItems = [
     { path: '/', icon: Activity, label: 'Dashboard' },
     { path: '/patients', icon: Users, label: 'Patients' },
@@ -24,22 +28,20 @@ const Sidebar = () => {
       <nav className="flex-1 p-4 space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const isActive = pathname === item.path || (item.path !== '/' && pathname?.startsWith(item.path));
           return (
-            <NavLink
+            <Link
               key={item.path}
-              to={item.path}
-              end={item.path === '/'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-purple-50 text-purple-600'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`
-              }
+              href={item.path}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-purple-50 text-purple-600'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
             >
               <Icon className="w-5 h-5" />
               <span className="font-medium">{item.label}</span>
-            </NavLink>
+            </Link>
           );
         })}
       </nav>
