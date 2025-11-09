@@ -36,23 +36,13 @@ export async function OPTIONS(req) {
   });
 }
 
-// export async function GET(req) {
-//   console.log("Hello");
-
-//   return new Response({}, {
-//       status: 200,
-//       statusText: "test",
-//       {},
-//     })
-// }
-
 // Handle GET requests
 export async function GET(req) {
   try {
     const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
       runtime, 
       serviceAdapter,
-      endpoint: "/api2/copilotkit",
+      endpoint: "/api/copilotkit",
     });
 
     const response = await handleRequest(req); 
@@ -88,7 +78,7 @@ export const POST = async (req) => {
     const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
       runtime, 
       serviceAdapter,
-      endpoint: "/api2/copilotkit",
+      endpoint: "/api/copilotkit",
     });
 
     const response = await handleRequest(req);

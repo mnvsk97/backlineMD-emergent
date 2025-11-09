@@ -10,7 +10,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:800
 
 export default function Providers({ children }) {
   return (
-    <CopilotKit runtimeUrl="/api2/copilotkit" agent="orchestrator">
+    <CopilotKit runtimeUrl="/api/copilotkit" agent="orchestrator">
       <ChatProvider>
         <div className="App flex h-screen overflow-hidden">
           <Sidebar />
