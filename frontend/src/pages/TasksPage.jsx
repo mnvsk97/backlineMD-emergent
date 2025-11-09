@@ -109,13 +109,13 @@ const TasksPage = () => {
               return (
                 <Card
                   key={task.task_id}
-                  className="p-5 border border-gray-200 hover:border-gray-900 transition-all cursor-pointer"
+                  className="p-5 border-l-4 border-orange-400 hover:border-orange-500 bg-white hover:shadow-lg transition-all cursor-pointer"
                   data-testid={`task-card-${task.task_id}`}
                   onClick={() => handleTaskClick(task)}
                 >
                   <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <User className="w-5 h-5 text-gray-600" />
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <User className="w-5 h-5 text-orange-600" />
                     </div>
                     
                     <div className="flex-1">
