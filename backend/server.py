@@ -575,9 +575,6 @@ async def trigger_document_extraction(document_id: str, tenant_id: str):
         "status": status
     })
 
-# Continue in next file due to size...
-# This file contains the remaining routes to be added to server_new.py
-
 # ==================== TASK ROUTES ====================
 
 @app.get("/api/tasks")
