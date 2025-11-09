@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Clock, User, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { Clock, User, AlertTriangle, CheckCircle, XCircle, Plus } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
+import CreateTaskModal from '../components/CreateTaskModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
