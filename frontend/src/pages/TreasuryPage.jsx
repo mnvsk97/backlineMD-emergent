@@ -159,7 +159,10 @@ const TreasuryPage = () => {
               ))}
             </div>
             
-            <button className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2">
+            <button 
+              onClick={() => setShowCreateClaimModal(true)}
+              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
+            >
               <DollarSign className="w-4 h-4" />
               Create New Claim
             </button>
