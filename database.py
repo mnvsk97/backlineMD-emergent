@@ -1,6 +1,8 @@
 import os
+import ssl
 from typing import Optional
 
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # MongoDB connection
