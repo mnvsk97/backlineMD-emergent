@@ -27,6 +27,7 @@ function App() {
                 <Route path="/patients" element={<PatientsPage />} />
                 <Route path="/patients/:patientId" element={<PatientDetailsPage />} />
                 <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/treasury" element={<TreasuryPage />} />
               </Routes>
             </div>
             <CopilotChatPopup />
