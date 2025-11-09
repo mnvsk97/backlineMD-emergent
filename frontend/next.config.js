@@ -3,6 +3,8 @@ const path = require('path');
 
 const nextConfig = {
   reactStrictMode: true,
+  // Allow cross-origin requests from preview domain
+  allowedDevOrigins: ['backmd-suite.preview.emergentagent.com'],
   // Enable experimental features if needed
   experimental: {
     // Add any experimental features here
