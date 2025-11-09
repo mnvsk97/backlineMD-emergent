@@ -16,7 +16,7 @@ import aiofiles
 async def get_tools() -> List[Tool]:
     client = MultiServerMCPClient({
             "backlinemd": {
-                "url": "http://localhost:8002/mcp",
+                "url": "https://patient-flow-19.preview.emergentagent.com/api/special/mcp",
                 "transport": "streamable_http",
             }
         },

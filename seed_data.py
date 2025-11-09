@@ -4,14 +4,18 @@ Run with: python seed_data.py
 """
 
 import asyncio
+import os
 import random
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from dotenv import load_dotenv
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
-MONGO_URL = "mongodb://localhost:27017"
-DEFAULT_TENANT = "hackathon-demo"
+load_dotenv()
+
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+DEFAULT_TENANT = os.environ.get("DEFAULT_TENANT", "hackathon-demo")
 
 # Staff names
 DOCTORS = ["Dr. James O'Brien", "Dr. Sarah Chen", "Dr. Michael Rodriguez"]

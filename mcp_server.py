@@ -89,6 +89,14 @@ TOOL_PERMISSIONS = {
         "delete_appointment",
         "get_insurance_claims",
     ],
+    "voice_agent": [
+        "find_or_create_patient",
+        "update_patient",
+        "get_appointments",
+        "create_appointment",
+        "update_appointment",
+        "delete_appointment",
+    ],
 }
 
 
