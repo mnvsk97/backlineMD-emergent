@@ -24,39 +24,11 @@ const TreasuryPage = () => {
 
   const fetchClaims = useCallback(async () => {
     try {
-      // Mock data for now - replace with actual API call
-      const mockClaims = [
-        {
-          claim_id: 'C12345',
-          patient_id: 'P78901',
-          patient_name: 'Jane Doe',
-          insurance_provider: 'Blue Shield',
-          amount: 2500.00,
-          status: 'Pending',
-          submitted_date: '2023-08-15',
-        },
-        {
-          claim_id: 'C67890',
-          patient_id: 'P65432',
-          patient_name: 'John Smith',
-          insurance_provider: 'Aetna',
-          amount: 1800.00,
-          status: 'Approved',
-          submitted_date: '2023-08-12',
-        },
-        {
-          claim_id: 'C54321',
-          patient_id: 'P54321',
-          patient_name: 'Emily Carter',
-          insurance_provider: 'UnitedHealthcare',
-          amount: 3200.00,
-          status: 'Denied',
-          submitted_date: '2023-08-10',
-        },
-      ];
-      setClaims(mockClaims);
+      const response = await axios.get(`${API}/claims`);
+      setClaims(response.data);
     } catch (error) {
       console.error('Error fetching claims:', error);
+      setClaims([]);
     } finally {
       setLoading(false);
     }
