@@ -945,25 +945,3 @@ async def get_dashboard_appointments():
 
     return result
 
-
-# ==================== COPILOT ENDPOINT ====================
-
-
-from copilotkit.integrations.fastapi import add_fastapi_endpoint
-from copilotkit import CopilotKitSDK, LangGraphAgent
-
-# Initialize CopilotKit SDK with LangGraph agent
-sdk = CopilotKitSDK(
-    agents=[
-        LangGraphAgent(
-            name="orchestrator",
-            description="BacklineMD orchestrator agent that helps with patient management, tasks, and insurance claims",
-            agent_id="orchestrator",
-            url="http://127.0.0.1:2024",
-        )
-    ],
-)
-
-# Add CopilotKit endpoint
-add_fastapi_endpoint(app, sdk, "/api/copilot")
-
