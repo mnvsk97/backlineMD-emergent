@@ -1019,7 +1019,7 @@ async def websocket_endpoint(websocket: WebSocket, tenant_id: str):
 
 @app.post("/api/copilot")
 async def copilot_endpoint(request: dict):
-    \"\"\"Simple CopilotKit endpoint\"\"\"
+    """Simple CopilotKit endpoint"""
     return {
         "response": "I'm here to help with BacklineMD. How can I assist you today?",
         "context": "Dashboard"
