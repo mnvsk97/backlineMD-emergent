@@ -7,14 +7,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import (
     FastAPI,
     File,
     HTTPException,
+    Request,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 # Load environment
 ROOT_DIR = Path(__file__).parent
@@ -951,6 +954,28 @@ async def get_dashboard_appointments():
         })
 
     return result
+
+
+# ==================== MCP PROXY ROUTE ====================
+
+@app.api_route("/api/special/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def special_mcp_proxy(request: Request, path: str = ""):
+    """Simple proxy to MCP server on localhost:8002"""
+    target_url = f"http://localhost:8002/mcp/{path}" if path else "http://localhost:8002/mcp"
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.request(
+            method=request.method,
+            url=target_url,
+            headers=dict(request.headers),
+            params=dict(request.query_params),
+            content=await request.body(),
+        )
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+        )
 
 
 
