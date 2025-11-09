@@ -173,11 +173,13 @@ const DashboardPage = () => {
                     <Card key={index} className="p-4 border-l-4 border-purple-400 bg-white hover:shadow-md transition-all">
                       <div className="flex items-center gap-4">
                         <div className="text-center min-w-[60px]">
-                          <p className="text-lg font-bold text-purple-600">{apt.time}</p>
+                          <p className="text-lg font-bold text-purple-600">
+                            {apt.time || new Date(apt.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          </p>
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-gray-900 text-sm">{apt.type}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{apt.patient_name} • {apt.doctor}</p>
+                          <p className="font-medium text-gray-900 text-sm">{apt.patient_name}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{formatAppointmentType(apt.appointment_type || apt.type)}</p>
                         </div>
                         <button className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors text-xs font-medium">
                           Join
