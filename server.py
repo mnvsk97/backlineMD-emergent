@@ -63,20 +63,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize CopilotKit SDK with LangGraph agent
-sdk = CopilotKitSDK(
-    agents=[
-        LangGraphAgent(
-            name="orchestrator",
-            description="BacklineMD orchestrator agent that helps with patient management, tasks, and insurance claims",
-            agent_id="orchestrator",
-            url="http://127.0.0.1:2024",
-        )
-    ],
-)
-
-# Add CopilotKit endpoint
-add_fastapi_endpoint(app, sdk, "/api/copilot")
+# CopilotKit proxy to LangGraph
+@app.api_route("/api/copilot", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def copilot_proxy(request: Request):
+    """Proxy all CopilotKit requests to LangGraph server"""
+    import httpx
+    
+    # Get the request details
+    method = request.method
+    path = request.url.path
+    query_params = str(request.url.query)
+    body = await request.body()
+    
+    # Build target URL
+    target_url = f"http://127.0.0.1:2024{path}"
+    if query_params:
+        target_url += f"?{query_params}"
+    
+    # Forward headers
+    headers = dict(request.headers)
+    headers.pop("host", None)  # Remove host header
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.request(
+                method=method,
+                url=target_url,
+                content=body,
+                headers=headers,
+            )
+            
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.headers.get("content-type"),
+            )
+        except Exception as e:
+            logger.error(f"CopilotKit proxy error: {str(e)}")
+            return Response(
+                content=str(e),
+                status_code=500,
+            )
 
 
 # ==================== HELPER FUNCTIONS ====================
