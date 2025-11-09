@@ -61,30 +61,73 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# CopilotKit integration with remote LangGraph
-from copilotkit.integrations.fastapi import add_fastapi_endpoint
-from copilotkit import CopilotKitSDK, LangGraphAgent
-from langgraph_sdk import get_client
+# CopilotKit endpoint with LangGraph streaming
+from fastapi.responses import StreamingResponse
+import httpx
+import json
 
-# Get the remote LangGraph client
-langgraph_client = get_client(url="http://127.0.0.1:2024")
-
-# Get the graph from the client
-graph = langgraph_client.assistants.get(assistant_id="orchestrator")
-
-# Initialize CopilotKit SDK with the remote LangGraph agent
-sdk = CopilotKitSDK(
-    agents=[
-        LangGraphAgent(
-            name="orchestrator",
-            description="BacklineMD orchestrator agent that helps with patient management, tasks, and insurance claims",
-            graph=graph,
-        )
-    ],
-)
-
-# Add the CopilotKit endpoint
-add_fastapi_endpoint(app, sdk, "/api/copilot")
+@app.post("/api/copilot")
+async def copilotkit_endpoint(request: Request):
+    """CopilotKit endpoint that connects to remote LangGraph server"""
+    try:
+        # Get the request body
+        body = await request.json()
+        
+        # Extract the messages from CopilotKit request
+        messages = body.get("messages", [])
+        thread_id = body.get("threadId")
+        
+        logger.info(f"CopilotKit request - Messages: {len(messages)}, ThreadId: {thread_id}")
+        
+        # Forward to LangGraph
+        langgraph_url = "http://127.0.0.1:2024"
+        
+        # Create or get thread
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            # Create thread if needed
+            if not thread_id:
+                thread_response = await client.post(
+                    f"{langgraph_url}/threads",
+                    json={"metadata": {"source": "copilotkit"}}
+                )
+                thread_data = thread_response.json()
+                thread_id = thread_data.get("thread_id")
+                logger.info(f"Created new thread: {thread_id}")
+            
+            # Send message to LangGraph
+            if messages:
+                last_message = messages[-1]
+                message_content = last_message.get("content", "")
+                
+                # Invoke the agent
+                run_response = await client.post(
+                    f"{langgraph_url}/threads/{thread_id}/runs",
+                    json={
+                        "assistant_id": "orchestrator",
+                        "input": {"messages": [{"role": "user", "content": message_content}]},
+                        "stream_mode": "messages"
+                    }
+                )
+                
+                # Stream the response back
+                async def generate():
+                    async for chunk in run_response.aiter_bytes():
+                        yield chunk
+                
+                return StreamingResponse(
+                    generate(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                    }
+                )
+        
+        return {"threadId": thread_id, "messages": []}
+        
+    except Exception as e:
+        logger.error(f"CopilotKit endpoint error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== HELPER FUNCTIONS ====================
