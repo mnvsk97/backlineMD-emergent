@@ -135,6 +135,15 @@ class PatientCreate(BaseModel):
     address: Optional[Dict[str, Any]] = None
     preconditions: Optional[List[str]] = []
     profile_image: Optional[str] = None
+    # Additional patient info
+    weight: Optional[float] = None  # in kg
+    height: Optional[float] = None  # in cm
+    blood_type: Optional[str] = None  # A+, B+, O-, etc.
+    insurance_provider: Optional[str] = None
+    insurance_policy_number: Optional[str] = None
+    insurance_group_number: Optional[str] = None
+    insurance_effective_date: Optional[str] = None
+    insurance_expiry_date: Optional[str] = None
 
 
 class PatientUpdate(BaseModel):
