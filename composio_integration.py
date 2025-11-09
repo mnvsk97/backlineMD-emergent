@@ -4,7 +4,8 @@ Handles email sending for patient communication, task notifications, etc.
 """
 import os
 import asyncio
-from composio_openai import ComposioToolSet, Action
+from composio_openai import ComposioToolSet
+from composio import Action
 from openai import OpenAI
 
 # Initialize Composio with API key from environment
