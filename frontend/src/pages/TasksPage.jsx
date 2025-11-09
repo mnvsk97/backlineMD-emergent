@@ -59,6 +59,11 @@ const TasksPage = () => {
 
   return (
     <div className="flex-1 h-screen overflow-hidden flex flex-col">
+      <CreateTaskModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+      />
+      
       <Header 
         title="Task Management" 
         subtitle="Review and manage AI-generated tasks"
