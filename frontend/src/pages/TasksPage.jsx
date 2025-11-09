@@ -62,6 +62,7 @@ const TasksPage = () => {
       <CreateTaskModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
+        onSuccess={fetchTasks}
       />
       
       <Header 
@@ -165,9 +166,16 @@ const TasksPage = () => {
                     <div className="flex gap-2">
                       <button 
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          // Handle approve
+                          try {
+                            await apiService.updateTask(task.task_id, { state: 'done' });
+                            toast.success('Task approved successfully');
+                            fetchTasks();
+                          } catch (error) {
+                            console.error('Error approving task:', error);
+                            toast.error('Failed to approve task');
+                          }
                         }}
                       >
                         <CheckCircle className="w-4 h-4" />
@@ -175,9 +183,16 @@ const TasksPage = () => {
                       </button>
                       <button 
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          // Handle reject
+                          try {
+                            await apiService.updateTask(task.task_id, { state: 'cancelled' });
+                            toast.success('Task rejected successfully');
+                            fetchTasks();
+                          } catch (error) {
+                            console.error('Error rejecting task:', error);
+                            toast.error('Failed to reject task');
+                          }
                         }}
                       >
                         <XCircle className="w-4 h-4" />

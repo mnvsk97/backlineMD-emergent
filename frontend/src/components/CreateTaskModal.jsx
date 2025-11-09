@@ -83,8 +83,13 @@ const CreateTaskModal = ({ isOpen, onClose, prefilledData = {} }) => {
       
       toast.success('Task created successfully!');
       onClose();
-      // Trigger a page refresh or callback to update task list
-      window.location.reload();
+      // Trigger callback to update task list if provided
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        // Fallback: reload page
+        window.location.reload();
+      }
     } catch (error) {
       console.error('Error creating task:', error);
       toast.error('Failed to create task');

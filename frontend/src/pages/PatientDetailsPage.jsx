@@ -30,6 +30,8 @@ const PatientDetailsPage = ({ params }) => {
   const [patientAppointments, setPatientAppointments] = useState([]);
   const [patientDocuments, setPatientDocuments] = useState([]);
   const [patientNotes, setPatientNotes] = useState([]);
+  const [patientConsentForms, setPatientConsentForms] = useState([]);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
 
   useEffect(() => {
     if (patientId) {
@@ -50,7 +52,10 @@ const PatientDetailsPage = ({ params }) => {
       ]);
 
       if (patientRes.status === 'fulfilled') {
-        setPatient(patientRes.value.data);
+        const patientData = patientRes.value.data;
+        setPatient(patientData);
+        // Notes are included in patient data
+        setPatientNotes(patientData.notes || []);
       }
 
       if (summaryRes.status === 'fulfilled' && summaryRes.value) {
@@ -69,13 +74,12 @@ const PatientDetailsPage = ({ params }) => {
         setPatientDocuments(documentsRes.value.data || []);
       }
 
-      // Fetch notes if endpoint exists
+      // Fetch consent forms
       try {
-        const notesRes = await axios.get(`${API}/patients/${patientId}/notes`);
-        setPatientNotes(notesRes.data || []);
+        const consentFormsRes = await apiService.getConsentForms({ patient_id: patientId });
+        setPatientConsentForms(consentFormsRes.data || []);
       } catch (error) {
-        // Notes endpoint might not exist, that's okay
-        console.log('Notes endpoint not available');
+        console.log('Consent forms endpoint not available');
       }
     } catch (error) {
       console.error('Error fetching patient data:', error);
@@ -162,6 +166,23 @@ const PatientDetailsPage = ({ params }) => {
     }
   };
 
+  const handleGenerateSummary = async () => {
+    setGeneratingSummary(true);
+    try {
+      // Use GET endpoint which always generates a fresh summary
+      const response = await axios.get(`${API}/patients/${patientId}/summary`);
+      setPatientSummary(response.data);
+      // Refresh patient data to get updated summary
+      fetchPatientData();
+      toast.success('AI summary regenerated successfully!');
+    } catch (error) {
+      console.error('Error generating summary:', error);
+      toast.error('Failed to generate summary');
+    } finally {
+      setGeneratingSummary(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -184,17 +205,11 @@ const PatientDetailsPage = ({ params }) => {
     );
   }
 
-  const timeline = [
-    { title: 'Initial Consultation', status: 'completed', date: '2024-09-25', description: 'First consultation completed successfully' },
-    { title: 'Document Collection', status: 'completed', date: '2024-09-28', description: 'Medical history and insurance documents received' },
-    { title: 'Insurance Verification', status: 'in-progress', date: '2024-10-01', description: 'Verifying coverage with insurance provider' },
-    { title: 'Treatment Planning', status: 'pending', date: '2024-10-15', description: 'Schedule treatment plan discussion' }
-  ];
+  // Use actual treatment timeline from patient data
+  const timeline = patient?.treatment_timeline || [];
 
-  const notes = [
-    { date: '2024-10-01', author: "Dr. James O'Brien", content: 'Patient presented with typical symptoms. Vitals within normal range. BP: 125/80, HR: 68 bpm. Discussed treatment options and next steps.' },
-    { date: '2024-09-28', author: 'Nurse Sarah Chen', content: 'Intake completed. All required documents collected. Patient is cooperative and well-informed.' }
-  ];
+  // Use actual notes from patient data (empty for new patients)
+  const notes = patientNotes || [];
 
   const activities = [
     { type: 'document', message: 'Medical history document uploaded', time: '2 hours ago' },
@@ -203,7 +218,8 @@ const PatientDetailsPage = ({ params }) => {
     { type: 'note', message: "Clinical note added by Dr. O'Brien", time: '2 days ago' }
   ];
 
-  const aiSummary = `${patient.age || 34}-year-old ${(patient.gender || 'Male').toLowerCase()} patient with documented family history of heart disease and elevated cholesterol levels. Currently under ${patient.status.toLowerCase()}. Initial consultation completed with comprehensive medical history review. Patient demonstrates good understanding of treatment options and shows commitment to lifestyle modifications including Mediterranean diet and regular exercise regimen. Recent vitals show stable condition with BP 125/80 and HR 68 bpm. Recommended follow-up in 4-6 weeks to assess progress and adjust treatment plan as needed.`;
+  // Use actual AI summary from patient data (empty initially)
+  const aiSummary = patient?.ai_summary || patientSummary?.summary || null;
 
   // Available consent forms for sending
   const availableForms = [
@@ -264,20 +280,33 @@ const PatientDetailsPage = ({ params }) => {
               <TabsTrigger value="tasks" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Tasks ({patient.tasks_count})</TabsTrigger>
               <TabsTrigger value="appointments" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Appointments ({patient.appointments_count})</TabsTrigger>
               <TabsTrigger value="activities" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Activities</TabsTrigger>
-              <TabsTrigger value="docs" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Docs (5)</TabsTrigger>
+              <TabsTrigger value="docs" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Docs ({patientConsentForms?.length || 4})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="summary" className="space-y-6">
               <Card className="p-6 border border-gray-200 bg-gradient-to-br from-purple-50 to-white">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                    <Activity className="w-5 h-5 text-white" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                      <Activity className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">AI-Generated Summary</h3>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">AI-Generated Summary</h3>
-                  </div>
+                  <button
+                    onClick={handleGenerateSummary}
+                    disabled={generatingSummary}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  >
+                    {generatingSummary ? 'Generating...' : 'Regenerate Summary'}
+                  </button>
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed">{aiSummary}</p>
+                {aiSummary ? (
+                  <p className="text-sm text-gray-700 leading-relaxed">{aiSummary}</p>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No AI summary generated yet. Click "Regenerate Summary" to create one.</p>
+                )}
               </Card>
 
               <Card className="p-6 border border-gray-200">
@@ -290,28 +319,28 @@ const PatientDetailsPage = ({ params }) => {
                       <Calendar className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-500">Age / Gender</span>
                     </div>
-                    <p className="text-base font-medium text-gray-900 ml-7">{patient.age || 34} years / {patient.gender || 'Male'}</p>
+                    <p className="text-base font-medium text-gray-900 ml-7">{patient.age ? `${patient.age} years` : 'N/A'} / {patient.gender || 'N/A'}</p>
                   </div>
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       <Weight className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-500">Weight</span>
                     </div>
-                    <p className="text-base font-medium text-gray-900 ml-7">175 lbs</p>
+                    <p className="text-base font-medium text-gray-900 ml-7">{patient.weight || 'N/A'}</p>
                   </div>
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       <Ruler className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-500">Height</span>
                     </div>
-                    <p className="text-base font-medium text-gray-900 ml-7">5'10"</p>
+                    <p className="text-base font-medium text-gray-900 ml-7">{patient.height || 'N/A'}</p>
                   </div>
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       <Droplet className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-500">Blood Type</span>
                     </div>
-                    <p className="text-base font-medium text-gray-900 ml-7">O+</p>
+                    <p className="text-base font-medium text-gray-900 ml-7">{patient.blood_type || 'N/A'}</p>
                   </div>
                 </div>
                 <div className="mt-6 pt-6 border-t border-gray-200">
@@ -320,8 +349,15 @@ const PatientDetailsPage = ({ params }) => {
                     <span className="text-sm font-semibold text-gray-900">Pre-conditions</span>
                   </div>
                   <div className="flex flex-wrap gap-2 ml-7">
-                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">Family history of heart disease</span>
-                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">Elevated cholesterol</span>
+                    {patient?.preconditions && patient.preconditions.length > 0 ? (
+                      patient.preconditions.map((precondition, index) => (
+                        <span key={index} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
+                          {precondition}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-500 italic">No preconditions documented</span>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -332,34 +368,38 @@ const PatientDetailsPage = ({ params }) => {
                   <h3 className="text-lg font-semibold text-gray-900">Treatment Timeline</h3>
                 </div>
                 <div className="space-y-6">
-                  {timeline.map((item, index) => (
-                    <div key={index} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          item.status === 'completed' ? 'bg-purple-600' : 
-                          item.status === 'in-progress' ? 'bg-purple-400' : 
-                          'bg-gray-200'
-                        }`}>
-                          {item.status === 'completed' ? (
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : item.status === 'in-progress' ? 
-                            <Activity className="w-4 h-4 text-white" /> : 
-                            <div className="w-2 h-2 bg-gray-400 rounded-full" />
-                          }
+                  {timeline && timeline.length > 0 ? (
+                    timeline.map((item, index) => (
+                      <div key={index} className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            item.status === 'completed' ? 'bg-purple-600' : 
+                            item.status === 'in-progress' ? 'bg-purple-400' : 
+                            'bg-gray-200'
+                          }`}>
+                            {item.status === 'completed' ? (
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : item.status === 'in-progress' ? 
+                              <Activity className="w-4 h-4 text-white" /> : 
+                              <div className="w-2 h-2 bg-gray-400 rounded-full" />
+                            }
+                          </div>
+                          {index < timeline.length - 1 && <div className={`w-0.5 h-12 ${item.status === 'completed' ? 'bg-purple-600' : 'bg-gray-200'}`} />}
                         </div>
-                        {index < timeline.length - 1 && <div className={`w-0.5 h-12 ${item.status === 'completed' ? 'bg-purple-600' : 'bg-gray-200'}`} />}
-                      </div>
-                      <div className="flex-1 pb-6">
-                        <div className="flex items-center justify-between mb-1">
-                          <h4 className="font-medium text-gray-900">{item.title}</h4>
-                          <span className="text-xs text-gray-500">{item.date}</span>
+                        <div className="flex-1 pb-6">
+                          <div className="flex items-center justify-between mb-1">
+                            <h4 className="font-medium text-gray-900">{item.title}</h4>
+                            <span className="text-xs text-gray-500">{item.date}</span>
+                          </div>
+                          <p className="text-sm text-gray-600">{item.description}</p>
                         </div>
-                        <p className="text-sm text-gray-600">{item.description}</p>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No treatment timeline entries yet.</p>
+                  )}
                 </div>
               </Card>
 
@@ -371,15 +411,19 @@ const PatientDetailsPage = ({ params }) => {
                       <h3 className="text-base font-semibold text-gray-900">Recent Notes</h3>
                     </div>
                     <div className="space-y-4">
-                      {notes.map((note, index) => (
-                        <div key={index} className="pb-4 border-b border-gray-200 last:border-0 last:pb-0">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-gray-900">{note.author}</span>
-                            <span className="text-xs text-gray-500">{note.date}</span>
+                      {notes && notes.length > 0 ? (
+                        notes.map((note, index) => (
+                          <div key={note.note_id || index} className="pb-4 border-b border-gray-200 last:border-0 last:pb-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-medium text-gray-900">{note.author}</span>
+                              <span className="text-xs text-gray-500">{note.date}</span>
+                            </div>
+                            <p className="text-sm text-gray-600">{note.content}</p>
                           </div>
-                          <p className="text-sm text-gray-600">{note.content}</p>
-                        </div>
-                      ))}
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">No notes yet. Add a note below.</p>
+                      )}
                     </div>
                   </Card>
 
@@ -403,28 +447,106 @@ const PatientDetailsPage = ({ params }) => {
                   <div className="space-y-3">
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Provider</p>
-                      <p className="text-sm font-medium text-gray-900">Aetna PPO</p>
+                      <p className="text-sm font-medium text-gray-900">{patient?.insurance?.company || 'Not provided'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Policy Number</p>
-                      <p className="text-sm font-medium text-gray-900">AC-12345-XY</p>
+                      <p className="text-sm font-medium text-gray-900">{patient?.insurance?.policy_number || 'Not provided'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Coverage Status</p>
-                      <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">Under Review</span>
+                      <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                        {patient?.insurance?.company ? 'Under Review' : 'Not Provided'}
+                      </span>
                     </div>
-                    <div className="pt-3 border-t border-gray-200">
-                      <p className="text-xs text-gray-600">Last verified: October 1, 2024</p>
-                    </div>
+                    {patient?.insurance?.company && (
+                      <div className="pt-3 border-t border-gray-200">
+                        <p className="text-xs text-gray-600">Last verified: {new Date().toLocaleDateString()}</p>
+                      </div>
+                    )}
                   </div>
                 </Card>
               </div>
             </TabsContent>
 
             <TabsContent value="tasks">
-              <Card className="p-8 text-center border border-gray-200">
-                <p className="text-gray-500">Task details will be displayed here</p>
-              </Card>
+              <div className="space-y-4">
+                {patientTasks && patientTasks.length > 0 ? (
+                  patientTasks.map((task) => (
+                    <Card key={task.task_id || task._id} className="p-6 border border-gray-200 hover:shadow-md transition-all">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="font-semibold text-gray-900">{task.title}</h4>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                              task.priority === 'high' ? 'bg-purple-100 text-purple-700' :
+                              task.priority === 'medium' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {task.priority}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              task.state === 'done' ? 'bg-green-100 text-green-700' :
+                              task.state === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                              task.state === 'cancelled' ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {task.state || 'open'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-3">{task.description}</p>
+                          <div className="flex items-center gap-4 text-xs text-gray-500">
+                            <span>Assigned to: {task.assigned_to}</span>
+                            {task.agent_type && <span>Agent: {task.agent_type}</span>}
+                            {task.waiting_minutes !== undefined && <span>Waiting: {task.waiting_minutes}m</span>}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          {task.state !== 'done' && task.state !== 'cancelled' && (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await apiService.updateTask(task.task_id || task._id, { state: 'done' });
+                                    toast.success('Task completed');
+                                    fetchPatientData();
+                                  } catch (error) {
+                                    console.error('Error updating task:', error);
+                                    toast.error('Failed to update task');
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                              >
+                                Complete
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await apiService.updateTask(task.task_id || task._id, { state: 'cancelled' });
+                                    toast.success('Task cancelled');
+                                    fetchPatientData();
+                                  } catch (error) {
+                                    console.error('Error updating task:', error);
+                                    toast.error('Failed to update task');
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))
+                ) : (
+                  <Card className="p-8 text-center border border-gray-200">
+                    <p className="text-gray-500">No tasks found for this patient</p>
+                  </Card>
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="appointments">
@@ -462,43 +584,43 @@ const PatientDetailsPage = ({ params }) => {
                 </div>
                 
                 <div className="space-y-3">
-                  {[
-                    { id: 1, name: 'Blood Test Results - Oct 2024', date: '2024-10-15', type: 'Lab Report', status: 'Ingested', size: '2.3 MB' },
-                    { id: 2, name: 'X-Ray Chest - Sep 2024', date: '2024-09-28', type: 'Imaging', status: 'Ingested', size: '5.1 MB' },
-                    { id: 3, name: 'Medical History Summary', date: '2024-09-25', type: 'Summary', status: 'Not Ingested', size: '1.8 MB' },
-                  ].map((record) => (
-                    <Card key={record.id} className="p-4 border border-gray-200 hover:shadow-md transition-all">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <FileText className="w-6 h-6 text-purple-600" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-gray-900">{record.name}</h4>
-                            <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
-                              <span>{record.type}</span>
-                              <span>•</span>
-                              <span>{record.date}</span>
-                              <span>•</span>
-                              <span>{record.size}</span>
+                  {patientDocuments && patientDocuments.length > 0 ? (
+                    patientDocuments.map((doc) => (
+                      <Card key={doc.document_id} className="p-4 border border-gray-200 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                              <FileText className="w-6 h-6 text-purple-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900">{doc.file?.name || doc.kind}</h4>
+                              <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                                <span>{doc.kind}</span>
+                                <span>•</span>
+                                <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              doc.status === 'ingested' 
+                                ? 'bg-green-100 text-green-700' 
+                                : doc.status === 'ingesting'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {doc.status}
+                            </span>
+                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                              <FileText className="w-4 h-4 text-gray-600" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            record.status === 'Ingested' 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {record.status}
-                          </span>
-                          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                            <FileText className="w-4 h-4 text-gray-600" />
-                          </button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No medical records uploaded yet.</p>
+                  )}
                 </div>
               </div>
 
@@ -516,53 +638,62 @@ const PatientDetailsPage = ({ params }) => {
                 </div>
                 
                 <div className="space-y-3">
-                  {[
-                    { id: 1, name: 'Insurance Information Release', sentDate: '2024-10-10', status: 'Signed', signedDate: '2024-10-12' },
-                    { id: 2, name: 'Medical Records Request - Lab', sentDate: '2024-10-05', status: 'Sent', signedDate: null },
-                    { id: 3, name: 'HIPAA Authorization Form', sentDate: null, status: 'To-Do', signedDate: null },
-                    { id: 4, name: 'Consent for Treatment', sentDate: '2024-09-20', status: 'Signed', signedDate: '2024-09-22' },
-                  ].map((form) => (
-                    <Card key={form.id} className="p-4 border border-gray-200 hover:shadow-md transition-all">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                            form.status === 'Signed' ? 'bg-green-100' :
-                            form.status === 'Sent' ? 'bg-blue-100' :
-                            'bg-gray-100'
-                          }`}>
-                            {form.status === 'Signed' ? (
-                              <CheckCircle className="w-6 h-6 text-green-600" />
-                            ) : form.status === 'Sent' ? (
-                              <Send className="w-6 h-6 text-blue-600" />
-                            ) : (
-                              <AlertCircle className="w-6 h-6 text-gray-600" />
-                            )}
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-gray-900">{form.name}</h4>
-                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                              {form.status === 'Signed' && form.signedDate && (
-                                <span>Signed on {form.signedDate}</span>
-                              )}
-                              {form.status === 'Sent' && form.sentDate && (
-                                <span>Sent on {form.sentDate}</span>
-                              )}
-                              {form.status === 'To-Do' && (
-                                <span>Not yet sent</span>
+                  {(() => {
+                    // Default 4 forms if none exist (hardcoded fallback)
+                    const defaultForms = [
+                      { title: "Insurance Information Release", status: "to_do", _id: "default-1" },
+                      { title: "Medical Records Request - Lab", status: "to_do", _id: "default-2" },
+                      { title: "HIPAA Authorization Form", status: "to_do", _id: "default-3" },
+                      { title: "Consent for Treatment", status: "to_do", _id: "default-4" },
+                    ];
+                    
+                    const formsToShow = patientConsentForms && patientConsentForms.length > 0 
+                      ? patientConsentForms 
+                      : defaultForms;
+                    
+                    return formsToShow.map((form) => (
+                      <Card key={form.consent_form_id || form._id} className="p-4 border border-gray-200 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                              form.status === 'signed' ? 'bg-green-100' :
+                              form.status === 'sent' ? 'bg-blue-100' :
+                              'bg-gray-100'
+                            }`}>
+                              {form.status === 'signed' ? (
+                                <CheckCircle className="w-6 h-6 text-green-600" />
+                              ) : form.status === 'sent' ? (
+                                <Send className="w-6 h-6 text-blue-600" />
+                              ) : (
+                                <AlertCircle className="w-6 h-6 text-gray-600" />
                               )}
                             </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900">{form.title || form.form_type}</h4>
+                              <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                                {form.status === 'signed' && form.signed_at && (
+                                  <span>Signed on {new Date(form.signed_at).toLocaleDateString()}</span>
+                                )}
+                                {form.status === 'sent' && form.sent_at && (
+                                  <span>Sent on {new Date(form.sent_at).toLocaleDateString()}</span>
+                                )}
+                                {(form.status === 'to_do' || !form.status) && (
+                                  <span>Not yet sent</span>
+                                )}
+                              </div>
+                            </div>
                           </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            form.status === 'signed' ? 'bg-green-100 text-green-700' :
+                            form.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {form.status === 'to_do' || !form.status ? 'To-Do' : form.status.charAt(0).toUpperCase() + form.status.slice(1)}
+                          </span>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          form.status === 'Signed' ? 'bg-green-100 text-green-700' :
-                          form.status === 'Sent' ? 'bg-blue-100 text-blue-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {form.status}
-                        </span>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    ));
+                  })()}
                 </div>
               </div>
             </TabsContent>

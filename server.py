@@ -174,87 +174,199 @@ async def get_patient(patient_id: str):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    # Get patient notes (empty for new patients)
+    notes_cursor = db.patient_notes.find({"patient_id": patient_id, "tenant_id": tenant_id}).sort("created_at", -1).limit(50)
+    notes = await notes_cursor.to_list(length=50)
+
+    # Get AI summary from patient document (no caching)
+    ai_summary = patient.get("ai_summary")
+
+    # Calculate age from DOB if available
+    age = patient.get("age")
+    if not age and patient.get("dob"):
+        try:
+            dob_date = datetime.strptime(patient["dob"], "%Y-%m-%d").date()
+            today = datetime.now(timezone.utc).date()
+            age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+        except:
+            age = None
+
+    # Get vitals and physical details
+    latest_vitals = patient.get("latest_vitals", {})
+    
     return {
         "patient_id": patient["_id"],
         "mrn": patient["mrn"],
-        "first_name": patient["first_name"],
-        "last_name": patient["last_name"],
-        "dob": patient["dob"],
-        "gender": patient["gender"],
+        "first_name": patient.get("first_name", ""),
+        "last_name": patient.get("last_name", ""),
+        "dob": patient.get("dob"),
+        "gender": patient.get("gender"),
         "email": patient["contact"]["email"],
         "phone": patient["contact"]["phone"],
         "address": patient["contact"].get("address"),
         "preconditions": patient.get("preconditions", []),
-        "latest_vitals": patient.get("latest_vitals", {}),
+        "latest_vitals": latest_vitals,
+        "height": latest_vitals.get("height") or patient.get("height"),
+        "weight": latest_vitals.get("weight") or patient.get("weight"),
+        "blood_type": latest_vitals.get("blood_type") or patient.get("blood_type"),
         "profile_image": patient.get("profile_image"),
         "status": patient.get("status"),
         "tasks_count": patient.get("tasks_count", 0),
         "appointments_count": patient.get("appointments_count", 0),
         "flagged_count": patient.get("flagged_count", 0),
-        "age": patient.get("age", 34),
+        "age": age,
+        "insurance": patient.get("insurance", {}),
+        "treatment_timeline": patient.get("treatment_timeline", []),
+        "ai_summary": ai_summary,
+        "notes": [
+            {
+                "note_id": note["_id"],
+                "date": note.get("created_at", datetime.now(timezone.utc)).strftime("%Y-%m-%d"),
+                "author": note.get("author", "Unknown"),
+                "content": note.get("content", ""),
+                "created_at": note.get("created_at", datetime.now(timezone.utc)).isoformat(),
+            }
+            for note in notes
+        ],
     }
 
 
 @app.get("/api/patients/{patient_id}/summary")
 async def get_patient_summary(patient_id: str):
+    """Generate and return patient summary - always generates a new summary on request"""
     db = get_db()
     tenant_id = DEFAULT_TENANT
 
-    # Check if cached
-    cached = await db.ai_artifacts.find_one(
-        {
-            "tenant_id": tenant_id,
-            "kind": "patient_summary",
-            "subject.patient_id": patient_id,
-        }
-    )
-
-    if cached and cached.get("expires_at") > datetime.now(timezone.utc):
-        return cached["payload"]
-
-    # Generate mock summary
     patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    summary_text = f"{patient.get('age', 34)}-year-old {patient['gender'].lower()} patient with documented {', '.join(patient.get('preconditions', ['family history of heart disease']))}. Currently under {patient.get('status', 'active').lower()}. Initial consultation completed with comprehensive medical history review. Recent vitals show stable condition. Recommended follow-up in 4-6 weeks."
+    # Calculate age from DOB if available
+    age = patient.get("age")
+    if not age and patient.get("dob"):
+        try:
+            dob_date = datetime.strptime(patient["dob"], "%Y-%m-%d").date()
+            today = datetime.now(timezone.utc).date()
+            age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+        except:
+            age = None
+    
+    # Always generate summary (mock for now, in production would use AI)
+    preconditions = patient.get("preconditions", [])
+    preconditions_text = ", ".join(preconditions) if preconditions else "no documented preconditions"
+    age_text = f"{age}-year-old" if age else "patient"
+    
+    # Generate a concise, 2-line high-quality clinical summary using OpenAI (GPT-4)
+
+    from openai import AsyncOpenAI
+
+    openai_client = AsyncOpenAI()
+
+    # Gather relevant info
+    # (already collected: age, gender, preconditions, status)
+    latest_appointment = await db.appointments.find_one(
+        {"patient_id": patient_id, "tenant_id": tenant_id},
+        sort=[("date", -1)]
+    )
+    latest_task = await db.tasks.find_one(
+        {"patient_id": patient_id, "tenant_id": tenant_id},
+        sort=[("created_at", -1)]
+    )
+    
+    is_new_patient = patient.get("status", "").lower() in ["intake in progress", "new"]
+
+    stage = None
+    if is_new_patient or patient.get("status", "").lower() in ["intake in progress", "new"]:
+        stage = "intake"
+    elif latest_appointment:
+        stage = latest_appointment.get("type", "consultation")
+    elif latest_task:
+        stage = latest_task.get("title", "pending task").lower()
+    else:
+        stage = patient.get("status", "Active").lower()
+
+    gender = patient.get('gender', 'Unknown')
+    condition = ', '.join(preconditions) if preconditions else 'no documented conditions'
+    status = patient.get('status', 'Active').lower()
+    first_name = patient.get('first_name', '')
+    last_name = patient.get('last_name', '')
+
+    # Compose prompt for short summary
+    summary_prompt = f"""Create a SHORT, high-quality, 2-line clinical summary for this patient, suitable for a busy medical team. Include age, gender, any relevant conditions, and their current consultation or intake stage, in clean natural language. If the patient is new, make it explicit.
+
+Name: {first_name} {last_name}
+Age: {age if age else "N/A"}
+Gender: {gender}
+Conditions: {condition}
+Stage: {stage}
+Status: {status}
+"""
+
+    if is_new_patient:
+        summary_prompt += "The patient is new and currently undergoing the intake process.\n"
+
+    summary_prompt += "Summary (2 lines with important details that are needed for a doctor consultion):"
+
+    summary_resp = await openai_client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are a world-class clinical summarizer. Your summaries are concise, accurate, always ≤2 lines, and highlight age, gender, key conditions, and the current stage."},
+            {"role": "user", "content": summary_prompt},
+        ],
+        max_tokens=82,
+        temperature=0.3,
+    )
+    summary_text = summary_resp.choices[0].message.content.strip()
+
+    # Store summary in patient document
+    await db.patients.update_one(
+        {"_id": patient_id, "tenant_id": tenant_id},
+        {
+            "$set": {
+                "ai_summary": summary_text,
+                "ai_summary_generated_at": datetime.now(timezone.utc),
+            }
+        }
+    )
 
     payload = {
         "summary": summary_text,
-        "citations": [
-            {
-                "doc_id": "DOC123",
-                "kind": "lab",
-                "page": 2,
-                "excerpt": "Cholesterol: 205 mg/dL",
-            },
-            {
-                "doc_id": "DOC124",
-                "kind": "imaging",
-                "page": 1,
-                "excerpt": "X-Ray: No abnormalities",
-            },
-        ],
+        "citations": [],
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "model": "gpt-4",
     }
 
-    # Cache it
-    await db.ai_artifacts.insert_one(
-        {
-            "_id": str(uuid.uuid4()),
-            "tenant_id": tenant_id,
-            "kind": "patient_summary",
-            "subject": {"patient_id": patient_id},
-            "payload": payload,
-            "model": "gpt-4",
-            "score": 0.95,
-            "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
-
     return payload
+
+
+@app.post("/api/patients/{patient_id}/notes")
+async def create_patient_note(patient_id: str, note_data: dict):
+    """Create a new patient note"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+
+    # Verify patient exists
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    note_id = str(uuid.uuid4())
+    note = {
+        "_id": note_id,
+        "tenant_id": tenant_id,
+        "patient_id": patient_id,
+        "content": note_data.get("content", ""),
+        "author": note_data.get("author", "Unknown"),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+    await db.patient_notes.insert_one(note)
+
+    return {
+        "note_id": note_id,
+        "message": "Note created successfully",
+    }
 
 
 # ==================== DOCUMENT ROUTES ====================
@@ -498,7 +610,7 @@ async def list_tasks(
 
     return [
         {
-            "task_id": task["task_id"],
+            "task_id": task["_id"],  # Use _id as task_id for API consistency
             "title": task["title"],
             "description": task["description"],
             "patient_name": task.get("patient_name"),
@@ -954,6 +1066,63 @@ async def get_dashboard_appointments():
         })
 
     return result
+
+
+# ==================== CONSENT FORMS ROUTES ====================
+
+@app.get("/api/consent-forms")
+async def list_consent_forms(
+    patient_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+):
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+
+    query = {"tenant_id": tenant_id}
+    if patient_id:
+        query["patient_id"] = patient_id
+    if status:
+        query["status"] = status
+
+    cursor = db.consent_forms.find(query).skip(skip).limit(limit).sort("created_at", -1)
+    forms = await cursor.to_list(length=limit)
+
+    return [
+        {
+            "consent_form_id": form["_id"],
+            "patient_id": form["patient_id"],
+            "patient_name": form.get("patient_name"),
+            "template_id": form.get("template_id"),
+            "form_type": form.get("form_type"),
+            "title": form.get("title"),
+            "status": form.get("status"),
+            "sent_at": form.get("sent_at").isoformat() if form.get("sent_at") else None,
+            "signed_at": form.get("signed_at").isoformat() if form.get("signed_at") else None,
+            "created_at": form.get("created_at").isoformat() if form.get("created_at") else None,
+        }
+        for form in forms
+    ]
+
+
+@app.get("/api/form-templates")
+async def list_form_templates():
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+
+    cursor = db.form_templates.find({"tenant_id": tenant_id}).sort("created_at", -1)
+    templates = await cursor.to_list(length=100)
+
+    return [
+        {
+            "template_id": template["_id"],
+            "name": template.get("name"),
+            "description": template.get("description"),
+            "purpose": template.get("purpose"),
+        }
+        for template in templates
+    ]
 
 
 # ==================== MCP PROXY ROUTE ====================

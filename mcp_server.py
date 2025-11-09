@@ -3,6 +3,7 @@ FastMCP Server for BacklineMD AI Agents
 Provides tools for patient management, appointments, claims, documents, consent forms, and tasks
 """
 
+import asyncio
 import os
 import random
 import uuid
@@ -122,10 +123,10 @@ async def find_or_create_patient(
     name: Optional[str] = None,
     email: Optional[str] = None,
     phone: Optional[str] = None,
-    first_name: Optional[str] = None,
-    last_name: Optional[str] = None,
     dob: Optional[str] = None,
     gender: Optional[str] = None,
+    insurance_company: Optional[str] = None,
+    insurance_policy_number: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Find an existing patient or create a new one.
@@ -138,6 +139,8 @@ async def find_or_create_patient(
         last_name: Patient last name (overrides name if provided)
         dob: Date of birth in YYYY-MM-DD format
         gender: Patient gender (Male, Female, Other)
+        insurance_company: Insurance company name
+        insurance_policy_number: Insurance policy number
 
     Returns:
         Dict with patient_id and patient details
@@ -155,8 +158,7 @@ async def find_or_create_patient(
     if existing:
         return {
             "patient_id": existing["_id"],
-            "first_name": existing["first_name"],
-            "last_name": existing["last_name"],
+            "name": f"{existing.get('first_name', '')} {existing.get('last_name', '')}".strip() or existing.get("name", ""),
             "email": existing["contact"]["email"],
             "phone": existing["contact"]["phone"],
             "mrn": existing["mrn"],
@@ -164,42 +166,73 @@ async def find_or_create_patient(
         }
 
     # Create new patient
-    if name and not (first_name and last_name):
-        parts = name.strip().split(" ", 1)
-        first_name = parts[0]
-        last_name = parts[1] if len(parts) > 1 else ""
-
-    if not first_name:
-        return {"error": "first_name or name is required to create a patient"}
+    if not name:
+        return {"error": "name is required to create a patient"}
 
     patient_id = str(uuid.uuid4())
     mrn = f"MRN{random.randint(100000, 999999)}"
 
+    # Parse name into first_name and last_name
+    name_parts = name.strip().split()
+    first_name = name_parts[0] if name_parts else ""
+    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+    full_name = f"{first_name} {last_name}".strip()
+
     # Generate search n-grams
-    full_name = f"{first_name} {last_name or ''}".strip()
     ngrams = [
         full_name.lower().replace(" ", "")[i : i + 3]
         for i in range(len(full_name.replace(" ", "")) - 2)
     ]
+
+    # Initialize treatment timeline to first stage
+    treatment_timeline = [
+        {
+            "title": "Initial Consultation",
+            "status": "pending",
+            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "description": "Initial consultation pending"
+        }
+    ]
+
+    # Calculate age from DOB if provided
+    age = None
+    if dob:
+        try:
+            dob_date = datetime.strptime(dob, "%Y-%m-%d").date()
+            today = datetime.now(timezone.utc).date()
+            age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+        except:
+            pass
 
     patient = {
         "_id": patient_id,
         "tenant_id": DEFAULT_TENANT,
         "mrn": mrn,
         "first_name": first_name,
-        "last_name": last_name or "",
+        "last_name": last_name,
+        "name": full_name,
         "dob": dob or "1990-01-01",
+        "age": age,  # Store calculated age
         "gender": gender or "Unknown",
         "contact": {
             "email": email or f"{first_name.lower()}@example.com",
             "phone": phone or "555-0000",
             "address": {},
         },
+        "insurance": {
+            "company": insurance_company,
+            "policy_number": insurance_policy_number,
+        },
         "preconditions": [],
         "flags": [],
         "latest_vitals": {},
+        "height": None,  # Will be set when available
+        "weight": None,  # Will be set when available
+        "blood_type": None,  # Will be set when available
         "profile_image": None,
-        "status": "Active",
+        "status": "Intake In Progress",
+        "treatment_timeline": treatment_timeline,
+        "ai_summary": None,  # Empty initially, will be generated on demand
         "tasks_count": 0,
         "appointments_count": 0,
         "flagged_count": 0,
@@ -211,14 +244,202 @@ async def find_or_create_patient(
 
     await db.patients.insert_one(patient)
 
+    # Step 1: Patient is created ✓ (done above)
+
+    # Step 2: Generate AI summary for the patient
+    try:
+        # Generate a simple summary for new patient
+        preconditions_text = ", ".join(patient.get("preconditions", [])) if patient.get("preconditions") else "no documented preconditions"
+        age_text = f"{age}-year-old" if age else "patient"
+        summary_text = f"{age_text} {patient.get('gender', 'Unknown').lower()} patient with {preconditions_text}. Currently in intake process. Initial consultation pending. Medical records collection in progress."
+        
+        # Store summary in patient document
+        await db.patients.update_one(
+            {"_id": patient_id, "tenant_id": DEFAULT_TENANT},
+            {
+                "$set": {
+                    "ai_summary": summary_text,
+                    "ai_summary_generated_at": datetime.now(timezone.utc),
+                }
+            }
+        )
+    except Exception as e:
+        print(f"Warning: Failed to generate AI summary: {e}")
+
+    # Get form templates to create default consent forms
+    form_templates = await db.form_templates.find({"tenant_id": DEFAULT_TENANT}).to_list(length=10)
+    
+    # Default 4 consent forms if no templates exist
+    default_forms = [
+        {"name": "Insurance Information Release", "description": "Authorization to release medical information to insurance provider"},
+        {"name": "Medical Records Request - Lab", "description": "Request medical records from external laboratory"},
+        {"name": "HIPAA Authorization Form", "description": "HIPAA compliant authorization for information disclosure"},
+        {"name": "Consent for Treatment", "description": "Patient consent for proposed treatment plan"},
+    ]
+    
+    # Use templates if available, otherwise use default forms
+    forms_to_create = form_templates if form_templates else default_forms
+    
+    # Create default consent forms with "to_do" status (always create 4 forms)
+    created_forms = []
+    for i, template in enumerate(forms_to_create[:4]):  # Always create exactly 4 forms
+        consent_form_id = str(uuid.uuid4())
+        consent_form = {
+            "_id": consent_form_id,
+            "tenant_id": DEFAULT_TENANT,
+            "patient_id": patient_id,
+            "patient_name": full_name,
+            "template_id": template.get("_id") or f"template-{i}",
+            "form_type": template.get("name", "consent"),
+            "title": template.get("name", "Consent Form"),
+            "status": "to_do",
+            "sent_via": None,
+            "sent_at": None,
+            "signed_at": None,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+        await db.consent_forms.insert_one(consent_form)
+        created_forms.append(consent_form_id)
+
+    # Create AI tasks for document extraction, care taker, and intake agents
+    tasks_created = []
+    
+    # Task 1: Document extraction AI agent - set to TODO (open)
+    doc_extraction_task_id = str(uuid.uuid4())
+    doc_extraction_task = {
+        "_id": doc_extraction_task_id,
+        "task_id": f"T{random.randint(10000, 99999)}",
+        "tenant_id": DEFAULT_TENANT,
+        "source": "agent",
+        "kind": "document_review",
+        "title": f"Extract and Review Patient Documents - {full_name}",
+        "description": f"New patient {full_name} has been created. Please review and extract information from any uploaded documents. Ensure all medical records are properly processed and indexed.",
+        "patient_id": patient_id,
+        "patient_name": full_name,
+        "assigned_to": "AI - Document Extractor",
+        "agent_type": "doc_extraction",
+        "priority": "medium",
+        "state": "open",  # TODO state
+        "confidence_score": 1.0,
+        "waiting_minutes": 0,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": "ai_agent",
+    }
+    await db.tasks.insert_one(doc_extraction_task)
+    tasks_created.append(doc_extraction_task_id)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+
+    # Task 2: Care taker agent - send consent forms
+    care_taker_task_id = str(uuid.uuid4())
+    care_taker_task = {
+        "_id": care_taker_task_id,
+        "task_id": f"T{random.randint(10000, 99999)}",
+        "tenant_id": DEFAULT_TENANT,
+        "source": "agent",
+        "kind": "consent_forms",
+        "title": f"Send Consent Forms to Patient - {full_name}",
+        "description": f"New patient {full_name} has been created. Please send consent forms (Insurance Information Release, Medical Records Request, HIPAA Authorization, and Consent for Treatment) to the patient via email or DocuSign.",
+        "patient_id": patient_id,
+        "patient_name": full_name,
+        "assigned_to": "Dr. James O'Brien",
+        "agent_type": "care_taker",
+        "priority": "medium",
+        "state": "open",  # TODO state
+        "confidence_score": 1.0,
+        "waiting_minutes": 0,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": "ai_agent",
+    }
+    await db.tasks.insert_one(care_taker_task)
+    tasks_created.append(care_taker_task_id)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+
+    # Task 3: Intake agent - collect medical records (set to in_progress)
+    intake_task_id = str(uuid.uuid4())
+    intake_task = {
+        "_id": intake_task_id,
+        "task_id": f"T{random.randint(10000, 99999)}",
+        "tenant_id": DEFAULT_TENANT,
+        "source": "agent",
+        "kind": "medical_records_collection",
+        "title": f"Collect Medical Records - {full_name}",
+        "description": f"New patient {full_name} has been created. Please collect and review medical records including medical history, lab results, imaging reports, and any previous treatment documentation.",
+        "patient_id": patient_id,
+        "patient_name": full_name,
+        "assigned_to": "AI - Intake Agent",
+        "agent_type": "intake",
+        "priority": "high",
+        "state": "in_progress",  # Set to in_progress as requested
+        "confidence_score": 1.0,
+        "waiting_minutes": 0,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": "ai_agent",
+    }
+    await db.tasks.insert_one(intake_task)
+    tasks_created.append(intake_task_id)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+
+    # Step 3: Tasks are created ✓ (done above)
+
+    # Step 4: Send welcome email synchronously (hardcoded email for now)
+    email_result = None
+    try:
+        from composio_integration import send_email_via_composio
+        # Hardcode email for now as requested
+        patient_email = "mnvsk97@gmail.com"  # Hardcoded email
+        welcome_subject = "Welcome to BacklineMD - Your Healthcare Journey Begins"
+        welcome_body = f"""
+Dear {first_name},
+
+Welcome to BacklineMD! We're excited to have you as part of our healthcare family.
+
+Your patient record has been created successfully:
+- Patient ID: {mrn}
+- Name: {full_name}
+- Email: {patient["contact"]["email"]}
+- Phone: {patient["contact"]["phone"]}
+
+Our team is here to support you throughout your healthcare journey. You can expect:
+- Personalized care from our experienced medical team
+- Easy access to your medical records and appointments
+- Secure communication through our patient portal
+
+If you have any questions or need assistance, please don't hesitate to reach out to us.
+
+Best regards,
+The BacklineMD Team
+        """
+        # Send email synchronously (wait for it)
+        email_result = await send_email_via_composio(
+            to_email=patient_email,
+            subject=welcome_subject,
+            body=welcome_body,
+            user_id="backlinemd-system"
+        )
+        print(f"Email sent result: {email_result}")
+    except Exception as e:
+        # Log error but don't fail patient creation
+        print(f"Warning: Failed to send welcome email: {e}")
+        email_result = {"success": False, "error": str(e)}
+
     return {
         "patient_id": patient_id,
+        "name": full_name,
         "first_name": first_name,
-        "last_name": last_name or "",
+        "last_name": last_name,
         "email": patient["contact"]["email"],
         "phone": patient["contact"]["phone"],
         "mrn": mrn,
         "status": "created",
+        "insurance_company": insurance_company,
+        "insurance_policy_number": insurance_policy_number,
+        "consent_forms_created": len(created_forms),
+        "tasks_created": len(tasks_created),
+        "email_sent": email_result.get("success", False) if email_result else False,
     }
 
 

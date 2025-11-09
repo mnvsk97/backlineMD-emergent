@@ -146,3 +146,6 @@ autoflake
 isort
 black
 aiofiles
+composio-openai-agents
+composio
+openai-agents
