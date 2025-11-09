@@ -134,3 +134,8 @@ frontend/node_modules/.cache/webpack/client-production/0.pack
 frontend/.next/cache/webpack/server-production/0.pack
 frontend/node_modules/.cache/webpack/client-development__compiler1__/1.pack
 frontend/node_modules/.cache/webpack/client-development__compiler1__/9.pack
+-e 
+# Environment files
+*.env
+*.env.*
+frontend/.next/cache/webpack/server-production/1.pack

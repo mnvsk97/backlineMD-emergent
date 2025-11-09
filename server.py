@@ -474,36 +474,17 @@ async def regenerate_patient_summary(patient_id: str):
 {appointments_info}
 {notes_info}
 
-Generate a professional medical summary following this structure:
+Generate a concise 23-line medical summary in plain text format, like a doctor's note:
 
-**Medical Summary for {patient.get('first_name', '')} {patient.get('last_name', '')}**
-
-**Patient Demographics and Current Status:**
-- Provide key demographic information and current clinical status
-
-**Key Findings from Documents:**
-- Summarize important findings from medical documents, lab results, imaging studies, etc.
-- If no documents are available, state that clearly
-
-**Recent Activities and Clinical Course:**
-- Summarize recent tasks, appointments, and clinical activities
-- Note the progression of care and any interventions
-
-**Clinical Notes Summary:**
-- Highlight key points from clinical notes if available
-
-**Assessment and Recommendations:**
-- Provide clinical assessment based on available information
-- Recommend next steps for patient care
-- Be specific and actionable
+Line 1: Age, gender, and brief chief complaint/status (e.g., "43 M with [condition/status]")
+Line 2 and 3: Key findings or current clinical status or any other relevant latest info from activities and stage.
 
 Important guidelines:
+- Keep it brief and clinical - maximum 2 lines
 - DO NOT make up or assume any information not provided
-- If information is missing, state "Not available" or "Not documented"
 - Use professional medical terminology
-- Be concise but comprehensive
-- Focus on actionable insights for clinical decision-making
 - Only include information that is explicitly provided in the data above
+- Format as simple plain text, no headers or structure
 """
     
     # Call OpenAI
