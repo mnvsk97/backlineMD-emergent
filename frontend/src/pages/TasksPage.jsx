@@ -32,6 +32,21 @@ const TasksPage = () => {
     }
   };
 
+  const handleTaskClick = (task) => {
+    setSelectedTask(task);
+    setShowTaskModal(true);
+  };
+
+  const handleCompleteTask = async (taskId, decision, notes) => {
+    try {
+      await axios.post(`${API}/tasks/${taskId}/complete`, { decision, notes });
+      await fetchTasks();
+    } catch (error) {
+      console.error('Error completing task:', error);
+      throw error;
+    }
+  };
+
   const getPriorityBadge = (priority) => {
     const badges = {
       urgent: { bg: 'bg-gray-900', text: 'text-white' },
