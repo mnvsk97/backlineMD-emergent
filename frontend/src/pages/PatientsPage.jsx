@@ -13,14 +13,17 @@ const PatientsPage = () => {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchPatients();
-  }, []);
+  }, [searchQuery]);
 
   const fetchPatients = async () => {
+    setLoading(true);
     try {
-      const response = await apiService.getPatients();
+      const params = searchQuery ? { q: searchQuery } : {};
+      const response = await apiService.getPatients(params);
       setPatients(response.data);
     } catch (error) {
       console.error('Error fetching patients:', error);
@@ -31,6 +34,10 @@ const PatientsPage = () => {
 
   const handlePatientCreated = () => {
     fetchPatients(); // Refresh list
+  };
+
+  const handleSearch = (e) => {
+    setSearchQuery(e.target.value);
   };
 
   // Provide all patients context to CopilotKit
