@@ -101,3 +101,50 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  1. Chat on main dashboard should have CopilotKit chat instead of plain one (similar to patient details page)
+  2. Remove TIME SAVED and AI Comms stats from dashboard
+
+frontend:
+  - task: "Add CopilotKit chat to main dashboard"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/DashboardPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Successfully integrated CopilotKit chat component on dashboard. Chat appears as floating panel on right side with AI Assistant title, suggested questions, and message input. Verified with screenshot."
+
+  - task: "Remove TIME SAVED and AI COMMS stats"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/DashboardPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Removed TIME SAVED and AI COMMS stat cards from dashboard. Changed grid from 4 columns to 2 columns. Only PENDING and APPOINTMENTS stats remain. Verified with screenshot."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Add CopilotKit chat to main dashboard"
+    - "Remove TIME SAVED and AI COMMS stats"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Completed both requested changes: 1) Added CopilotKit chat to dashboard as floating panel on right side, 2) Removed TIME SAVED and AI COMMS stats. Both changes verified with screenshot showing proper rendering."
