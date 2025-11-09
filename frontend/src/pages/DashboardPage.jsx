@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Activity, Calendar, User, AlertTriangle, Clock, MessageSquare, FileCheck } from 'lucide-react';
+import { Activity, Calendar, User, AlertTriangle, Clock, FileCheck } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import TaskDetailModal from '../components/TaskDetailModal';
+import { CopilotChat } from '@copilotkit/react-ui';
+import '@copilotkit/react-ui/styles.css';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
