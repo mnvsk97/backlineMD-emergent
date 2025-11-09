@@ -1509,3 +1509,59 @@ async def send_patient_notification(patient_id: str, notification_data: dict):
         logger.error(f"Error sending patient notification: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+# ==================== MCP PROXY ENDPOINT ====================
+
+@app.api_route("/api/proxy/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def mcp_proxy(request: Request, path: str = ""):
+    """
+    Proxy endpoint for MCP server
+    Forwards all requests to http://localhost:8002/mcp
+    """
+    import httpx
+    
+    # Build target URL
+    target_url = f"http://localhost:8002/mcp/{path}" if path else "http://localhost:8002/mcp"
+    
+    # Get query params
+    query_params = str(request.url.query)
+    if query_params:
+        target_url += f"?{query_params}"
+    
+    # Get request details
+    method = request.method
+    headers = dict(request.headers)
+    headers.pop("host", None)  # Remove host header
+    
+    # Get request body
+    body = await request.body()
+    
+    logger.info(f"MCP Proxy: {method} {target_url}")
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.request(
+                method=method,
+                url=target_url,
+                headers=headers,
+                content=body,
+            )
+            
+            # Forward the response
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.headers.get("content-type"),
+            )
+        except httpx.ConnectError:
+            logger.error(f"MCP server connection failed: {target_url}")
+            raise HTTPException(
+                status_code=503, 
+                detail="MCP server is not available. Make sure it's running on port 8002."
+            )
+        except Exception as e:
+            logger.error(f"MCP proxy error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
