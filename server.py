@@ -577,11 +577,18 @@ async def update_task(task_id: str, update_data: TaskUpdate):
     db = get_db()
     tenant_id = DEFAULT_TENANT
 
-    update_fields = {}
+    update_operations = {}
+    
+    # Handle $set operations
+    set_fields = {}
     if update_data.state:
-        update_fields["state"] = update_data.state
+        set_fields["state"] = update_data.state
+    set_fields["updated_at"] = datetime.now(timezone.utc)
+    update_operations["$set"] = set_fields
+    
+    # Handle $push operations
     if update_data.comment:
-        update_fields["$push"] = {
+        update_operations["$push"] = {
             "comments": {
                 "user_id": "demo-user",
                 "text": update_data.comment,
@@ -589,10 +596,8 @@ async def update_task(task_id: str, update_data: TaskUpdate):
             }
         }
 
-    update_fields["updated_at"] = datetime.now(timezone.utc)
-
     result = await db.tasks.update_one(
-        {"_id": task_id, "tenant_id": tenant_id}, {"$set": update_fields}
+        {"_id": task_id, "tenant_id": tenant_id}, update_operations
     )
 
     if result.matched_count == 0:
