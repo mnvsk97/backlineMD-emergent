@@ -83,7 +83,7 @@ async def copilotkit_endpoint(request: Request):
         langgraph_url = "http://127.0.0.1:2024"
         
         # Create or get thread
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             # Create thread if needed
             if not thread_id:
                 thread_response = await client.post(
@@ -99,20 +99,34 @@ async def copilotkit_endpoint(request: Request):
                 last_message = messages[-1]
                 message_content = last_message.get("content", "")
                 
-                # Invoke the agent
-                run_response = await client.post(
-                    f"{langgraph_url}/threads/{thread_id}/runs",
-                    json={
-                        "assistant_id": "orchestrator",
-                        "input": {"messages": [{"role": "user", "content": message_content}]},
-                        "stream_mode": "messages"
-                    }
-                )
-                
-                # Stream the response back
+                # Invoke the agent with streaming
                 async def generate():
-                    async for chunk in run_response.aiter_bytes():
-                        yield chunk
+                    try:
+                        # Start the run
+                        async with client.stream(
+                            "POST",
+                            f"{langgraph_url}/threads/{thread_id}/runs/stream",
+                            json={
+                                "assistant_id": "orchestrator",
+                                "input": {"messages": [{"role": "user", "content": message_content}]},
+                                "stream_mode": "messages",
+                            },
+                            timeout=120.0
+                        ) as response:
+                            # Stream the events
+                            async for line in response.aiter_lines():
+                                if line.startswith("data: "):
+                                    event_data = line[6:]  # Remove "data: " prefix
+                                    if event_data.strip():
+                                        try:
+                                            data = json.loads(event_data)
+                                            # Forward the event to CopilotKit
+                                            yield f"data: {json.dumps(data)}\n\n"
+                                        except json.JSONDecodeError:
+                                            continue
+                    except Exception as e:
+                        logger.error(f"Streaming error: {str(e)}")
+                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
                 
                 return StreamingResponse(
                     generate(),
@@ -120,6 +134,7 @@ async def copilotkit_endpoint(request: Request):
                     headers={
                         "Cache-Control": "no-cache",
                         "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",
                     }
                 )
         
