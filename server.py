@@ -546,16 +546,24 @@ async def create_task(task_data: TaskCreate):
     }
 
     # Use transaction to ensure atomicity
-    if client:
-        async with client.start_session() as session:
-            async with session.start_transaction():
-                await db.tasks.insert_one(task, session=session)
-                await db.patients.update_one(
-                    {"_id": task_data.patient_id},
-                    {"$inc": {"tasks_count": 1}},
-                    session=session,
-                )
-    else:
+    try:
+        if client:
+            async with client.start_session() as session:
+                async with session.start_transaction():
+                    await db.tasks.insert_one(task, session=session)
+                    await db.patients.update_one(
+                        {"_id": task_data.patient_id},
+                        {"$inc": {"tasks_count": 1}},
+                        session=session,
+                    )
+        else:
+            # Fallback without transaction
+            await db.tasks.insert_one(task)
+            await db.patients.update_one(
+                {"_id": task_data.patient_id}, {"$inc": {"tasks_count": 1}}
+            )
+    except Exception as e:
+        # Fallback without transaction if session fails
         await db.tasks.insert_one(task)
         await db.patients.update_one(
             {"_id": task_data.patient_id}, {"$inc": {"tasks_count": 1}}
