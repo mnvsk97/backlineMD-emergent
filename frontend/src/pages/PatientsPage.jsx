@@ -73,8 +73,17 @@ const PatientsPage = () => {
       
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-8 py-8">
-          {/* Create Patient Button */}
-          <div className="flex justify-end mb-6">
+          {/* Search and Create Button */}
+          <div className="flex items-center justify-between mb-6 gap-4">
+            <div className="flex-1 max-w-md">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={handleSearch}
+                placeholder="Search patients by name..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2 shadow-sm"
