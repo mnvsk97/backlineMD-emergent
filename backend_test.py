@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 import time
 
 # Configuration
-BACKEND_URL = "https://backmd-suite.preview.emergentagent.com"
+BACKEND_URL = "https://patient-flow-19.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 class BacklineMDTester:
