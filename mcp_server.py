@@ -75,11 +75,39 @@ TOOL_PERMISSIONS = {
         "update_task",
         "get_tasks",
     ],
+    "admin": [
+        "get_patients",
+        "find_or_create_patient",
+        "update_patient",
+        "get_patient",
+        "create_task",
+        "update_task",
+        "get_tasks",
+        "get_appointments",
+        "create_appointment",
+        "update_appointment",
+        "delete_appointment",
+        "get_insurance_claims",
+    ],
 }
 
 
 # ==================== PATIENT TOOLS ====================
 
+@mcp.tool()
+async def get_patients() -> List[Dict[str, Any]]:
+    """
+    Get all patients in the system.
+    """
+    patients = await db.patients.find({"tenant_id": DEFAULT_TENANT}).to_list(length=100)
+    return [
+        {
+            "patient_id": patient["_id"],
+            "first_name": patient["first_name"],
+            "last_name": patient["last_name"],
+        }
+        for patient in patients
+    ]
 
 @mcp.tool()
 async def find_or_create_patient(
@@ -1298,7 +1326,7 @@ def main():
     # FastMCP runs via stdio by default
     # This is meant to be run as a separate server process
     try:
-        mcp.run(transport="http", port=8002)
+        mcp.run(transport="streamable-http", port=8002)
     except Exception as e:
         print(f"Error running MCP server: {e}")
 

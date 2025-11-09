@@ -4,7 +4,6 @@ Main orchestrator that routes tasks to specialized sub-agents
 """
 
 import os
-import asyncio
 from deepagents import create_deep_agent
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
@@ -86,6 +85,20 @@ agent_to_tools = {
         "update_task",
         "get_tasks",
     ],
+    "admin": [
+        "get_patients",
+        "find_or_create_patient",
+        "update_patient",
+        "get_patient",
+        "create_task",
+        "update_task",
+        "get_tasks",
+        "get_appointments",
+        "create_appointment",
+        "update_appointment",
+        "delete_appointment",
+        "get_insurance_claims",
+    ],
 }
 
 
@@ -104,7 +117,7 @@ async def _create_subagents():
     doc_extraction_tools = [name_to_Tool[tool] for tool in agent_to_tools["doc_extraction"]]
     insurance_tools = [name_to_Tool[tool] for tool in agent_to_tools["insurance"]]
     care_taker_tools = [name_to_Tool[tool] for tool in agent_to_tools["care_taker"]]
-
+    admin_tools = [name_to_Tool[tool] for tool in agent_to_tools["admin"]]
     # Create subagents as dictionaries
     return [
         {
@@ -135,15 +148,23 @@ async def _create_subagents():
             "tools": care_taker_tools,
             "model": "openai:gpt-4o",
         },
+        {
+            "name": "admin_agent",
+            "description": "Manages patients, appointments, insurance claims, and documents. Use for patient management, appointment management, insurance claim management, and document management.",
+            "system_prompt": "You are an admin agent. You are responsible for managing patients, appointments, insurance claims, and documents. You are also responsible for managing the system and the users.",
+            "tools": admin_tools,
+            "model": "openai:gpt-4o",
+        }
     ]
 
 
 async def agent():
     subagents = await _create_subagents()
+    tools = await get_tools()
     agent = create_deep_agent(
         model=model,
         system_prompt=ORCHESTRATOR_PROMPT,
-        tools=[],
+        tools=tools,
         subagents=subagents,
     )
     return agent
