@@ -19,6 +19,15 @@ const TreasuryPage = () => {
   const [selectedClaim, setSelectedClaim] = useState(null);
   const [showCreateClaimModal, setShowCreateClaimModal] = useState(false);
 
+  // Format status to be more readable
+  const formatStatus = (status) => {
+    if (!status) return '';
+    return status
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   const fetchClaims = useCallback(async () => {
     try {
       const response = await apiService.getClaims();
