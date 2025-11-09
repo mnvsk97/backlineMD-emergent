@@ -15,6 +15,15 @@ const DashboardPage = () => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Format appointment type to be more readable
+  const formatAppointmentType = (type) => {
+    if (!type) return 'Consultation';
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   const fetchDashboardData = useCallback(async () => {
     try {
       const [tasksRes, patientsRes, appointmentsRes] = await Promise.all([
