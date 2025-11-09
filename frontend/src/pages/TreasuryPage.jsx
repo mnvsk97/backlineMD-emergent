@@ -93,6 +93,28 @@ const TreasuryPage = () => {
     return colors[status] || 'bg-gray-100 text-gray-700';
   };
 
+  const handleEmailClick = (claim) => {
+    setTaskModalData({
+      name: `Follow up on insurance claim via email - ${claim.patient_name}`,
+      description: `Send an email to ${claim.insurance_provider} to inquire about the status of claim ${claim.claim_id} for patient ${claim.patient_name}. The claim amount is $${claim.amount.toFixed(2)} and was submitted on ${claim.submitted_date}. Current status: ${claim.status}. Please request updates on when this claim will be settled and if any additional documentation is required.`,
+      assignedTo: 'AI - Insurance Agent',
+      priority: claim.status === 'Denied' ? 'urgent' : 'high',
+      patientId: claim.patient_id
+    });
+    setShowTaskModal(true);
+  };
+
+  const handleCallClick = (claim) => {
+    setTaskModalData({
+      name: `Follow up on insurance claim via phone call - ${claim.patient_name}`,
+      description: `Initiate a phone call to ${claim.insurance_provider} to inquire about the status of claim ${claim.claim_id} for patient ${claim.patient_name}. The claim amount is $${claim.amount.toFixed(2)} and was submitted on ${claim.submitted_date}. Current status: ${claim.status}. During the call, request immediate updates on the claim processing timeline and clarify any issues preventing settlement.`,
+      assignedTo: 'AI - Insurance Agent',
+      priority: claim.status === 'Denied' ? 'urgent' : 'high',
+      patientId: claim.patient_id
+    });
+    setShowTaskModal(true);
+  };
+
   return (
     <div className="flex-1 h-screen overflow-hidden flex flex-col">
       <Header 
