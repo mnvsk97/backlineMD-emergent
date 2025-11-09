@@ -843,16 +843,24 @@ async def create_appointment(appointment_data: AppointmentCreate):
     }
 
     # Use transaction to ensure atomicity
-    if client:
-        async with client.start_session() as session:
-            async with session.start_transaction():
-                await db.appointments.insert_one(appointment, session=session)
-                await db.patients.update_one(
-                    {"_id": appointment_data.patient_id},
-                    {"$inc": {"appointments_count": 1}},
-                    session=session,
-                )
-    else:
+    try:
+        if client:
+            async with client.start_session() as session:
+                async with session.start_transaction():
+                    await db.appointments.insert_one(appointment, session=session)
+                    await db.patients.update_one(
+                        {"_id": appointment_data.patient_id},
+                        {"$inc": {"appointments_count": 1}},
+                        session=session,
+                    )
+        else:
+            # Fallback without transaction
+            await db.appointments.insert_one(appointment)
+            await db.patients.update_one(
+                {"_id": appointment_data.patient_id}, {"$inc": {"appointments_count": 1}}
+            )
+    except Exception as e:
+        # Fallback without transaction if session fails
         await db.appointments.insert_one(appointment)
         await db.patients.update_one(
             {"_id": appointment_data.patient_id}, {"$inc": {"appointments_count": 1}}
