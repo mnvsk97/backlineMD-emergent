@@ -19,8 +19,7 @@ async def connect_db():
     if "mongodb+srv://" in MONGO_URL or "ssl=true" in MONGO_URL.lower() or "tls=true" in MONGO_URL.lower():
         ssl_options = {
             "tls": True,
-            "tlsCAFile": certifi.where(),
-            "serverSelectionTimeoutMS": 30000
+            "tlsCAFile": certifi.where()
         }
     
     client = AsyncIOMotorClient(
