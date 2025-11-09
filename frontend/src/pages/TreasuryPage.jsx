@@ -117,6 +117,12 @@ const TreasuryPage = () => {
 
   return (
     <div className="flex-1 h-screen overflow-hidden flex flex-col">
+      <CreateTaskModal
+        isOpen={showTaskModal}
+        onClose={() => setShowTaskModal(false)}
+        prefilledData={taskModalData}
+      />
+      
       <Header 
         title="Treasury Claims" 
         subtitle="Manage insurance claims and billing"
