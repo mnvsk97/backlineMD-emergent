@@ -175,7 +175,10 @@ const TreasuryPage = () => {
                 <Card
                   key={claim.claim_id}
                   className="p-6 border-l-4 border-purple-400 hover:border-purple-500 bg-white hover:shadow-lg transition-all cursor-pointer"
-                  onClick={openChat}
+                  onClick={() => {
+                    setSelectedClaim(claim);
+                    setShowClaimModal(true);
+                  }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-6 flex-1">
