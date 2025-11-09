@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import Header from '../components/Header';
 import SendFormsModal from '../components/SendFormsModal';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
 
 const PatientDetailsPage = () => {

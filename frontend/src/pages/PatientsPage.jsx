@@ -6,7 +6,6 @@ import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
 import CreatePatientModal from '../components/CreatePatientModal';
 import { apiService } from '../services/api';
-import sseClient from '../services/sse';
 import { toast } from 'sonner';
 
 const PatientsPage = () => {
@@ -20,25 +19,6 @@ const PatientsPage = () => {
   useEffect(() => {
     fetchPatients();
   }, [searchQuery]);
-
-  // Subscribe to patient events for real-time updates
-  useEffect(() => {
-    const unsubscribe = sseClient.on('patient', (event) => {
-      console.log('Patient event received:', event);
-
-      // Show toast notification
-      if (event.action === 'created') {
-        toast.success(`New patient: ${event.data?.first_name} ${event.data?.last_name}`);
-      } else if (event.action === 'updated') {
-        toast.info(`Patient updated: ${event.data?.first_name} ${event.data?.last_name}`);
-      }
-
-      // Refresh patient list
-      fetchPatients();
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const fetchPatients = async () => {
     setLoading(true);

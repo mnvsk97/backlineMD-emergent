@@ -1,22 +1,20 @@
 import asyncio
-import json
+import os
 import random
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import (
-    Depends,
     FastAPI,
     File,
     HTTPException,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBearer
 
 # Load environment
 ROOT_DIR = Path(__file__).parent
@@ -24,18 +22,33 @@ load_dotenv(ROOT_DIR / ".env")
 
 # Import our modules
 from database import close_db, connect_db, get_db
-from logger import get_logger
+from logger import (
+    get_logger,
+    log_api_error,
+    log_api_request,
+    log_database_operation,
+)
 from models import *
 
-# Event queue for SSE
-import queue
-event_queues = {}
 
 # Initialize logger
 logger = get_logger(__name__)
 
-# Create FastAPI app
-app = FastAPI(title="BacklineMD API", version="1.0.0")
+
+# Lifespan event handler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await connect_db()
+    logger.info("BacklineMD API started successfully")
+    yield
+    # Shutdown
+    await close_db()
+    logger.info("BacklineMD API stopped")
+
+
+# Create FastAPI app with lifespan
+app = FastAPI(title="BacklineMD API", version="1.0.0", lifespan=lifespan)
 
 # CORS
 app.add_middleware(
@@ -46,39 +59,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Security
-security = HTTPBearer()
-
-
-# Startup/Shutdown
-@app.on_event("startup")
-async def startup_event():
-    await connect_db()
-    print("\u2713 BacklineMD API started")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await close_db()
-    print("\u2713 BacklineMD API stopped")
-
-
-# ==================== NO AUTH - HACKATHON MODE ====================
-
-# Default tenant for hackathon
-DEFAULT_TENANT = "hackathon-demo"
-
-
-async def get_current_user():
-    """No auth required for hackathon"""
-    return {
-        "user_id": "demo-user",
-        "tenant_id": DEFAULT_TENANT,
-        "email": "demo@backlinemd.com",
-    }
-
 
 # ==================== HELPER FUNCTIONS ====================
+
+# Default tenant for hackathon/demo mode
+DEFAULT_TENANT = "hackathon-demo"
 
 
 def generate_ngrams(text: str, n: int = 3) -> List[str]:
@@ -86,21 +71,6 @@ def generate_ngrams(text: str, n: int = 3) -> List[str]:
     text = text.lower().replace(" ", "")
     return [text[i : i + n] for i in range(len(text) - n + 1)]
 
-
-async def broadcast_event(tenant_id: str, event_type: str, op: str, doc: dict):
-    """Broadcast event to SSE subscribers"""
-    event_data = {"type": event_type, "op": op, "doc": doc}
-
-    # Add to all queues for this tenant
-    if tenant_id in event_queues:
-        for q in event_queues[tenant_id]:
-            try:
-                q.put_nowait(event_data)
-            except queue.Full:
-                pass  # Drop event if queue is full
-
-
-# ==================== NO AUTH ROUTES FOR HACKATHON ====================
 
 # ==================== PATIENT ROUTES ====================
 
@@ -110,10 +80,9 @@ async def list_patients(
     q: Optional[str] = None,
     limit: int = 20,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     query = {"tenant_id": tenant_id}
     if q:
@@ -145,11 +114,9 @@ async def list_patients(
 
 
 @app.post("/api/patients")
-async def create_patient(
-    patient_data: PatientCreate, current_user: dict = Depends(get_current_user)
-):
+async def create_patient(patient_data: PatientCreate):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     patient_id = str(uuid.uuid4())
     mrn = f"MRN{random.randint(100000, 999999)}"
@@ -175,30 +142,25 @@ async def create_patient(
         "flags": [],
         "latest_vitals": {},
         "profile_image": patient_data.profile_image,
-        "status": "Active",
+        "status": "Intake In Progress",  # Default initial status
         "tasks_count": 0,
         "appointments_count": 0,
         "flagged_count": 0,
         "search": {"ngrams": ngrams},
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
-        "created_by": current_user["user_id"],
+        "created_by": "demo-user",
     }
 
     await db.patients.insert_one(patient)
-
-    # Broadcast event
-    await broadcast_event(
-        tenant_id, "patient", "insert", {"patient_id": patient_id, "name": full_name}
-    )
 
     return {"patient_id": patient_id, "message": "Patient created successfully"}
 
 
 @app.get("/api/patients/{patient_id}")
-async def get_patient(patient_id: str, current_user: dict = Depends(get_current_user)):
+async def get_patient(patient_id: str):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
     if not patient:
@@ -226,11 +188,9 @@ async def get_patient(patient_id: str, current_user: dict = Depends(get_current_
 
 
 @app.get("/api/patients/{patient_id}/summary")
-async def get_patient_summary(
-    patient_id: str, current_user: dict = Depends(get_current_user)
-):
+async def get_patient_summary(patient_id: str):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     # Check if cached
     cached = await db.ai_artifacts.find_one(
@@ -299,10 +259,9 @@ async def list_documents(
     status: Optional[str] = None,
     limit: int = 50,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     query = {"tenant_id": tenant_id}
     if patient_id:
@@ -334,10 +293,9 @@ async def upload_document(
     patient_id: str,
     kind: str,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     # In production, upload to S3. For now, just store metadata
     document_id = str(uuid.uuid4())
@@ -374,11 +332,9 @@ async def upload_document(
 
 
 @app.get("/api/documents/{document_id}")
-async def get_document(
-    document_id: str, current_user: dict = Depends(get_current_user)
-):
+async def get_document(document_id: str):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     document = await db.documents.find_one({"_id": document_id, "tenant_id": tenant_id})
     if not document:
@@ -399,10 +355,9 @@ async def get_document(
 async def update_document(
     document_id: str,
     update_data: DocumentUpdate,
-    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     update_fields = {}
     if update_data.status:
@@ -418,14 +373,6 @@ async def update_document(
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Document not found")
-
-    # Broadcast event
-    await broadcast_event(
-        tenant_id,
-        "document",
-        "update",
-        {"document_id": document_id, "status": update_data.status},
-    )
 
     return {"message": "Document updated successfully"}
 
@@ -443,13 +390,6 @@ async def trigger_document_extraction(document_id: str, tenant_id: str):
     # Update status to ingesting
     await db.documents.update_one(
         {"_id": document_id}, {"$set": {"status": DocumentStatus.INGESTING}}
-    )
-
-    await broadcast_event(
-        tenant_id,
-        "document",
-        "update",
-        {"document_id": document_id, "status": DocumentStatus.INGESTING},
     )
 
     # Wait 3 more seconds
@@ -519,23 +459,6 @@ async def trigger_document_extraction(document_id: str, tenant_id: str):
             {"_id": doc["patient_id"]}, {"$inc": {"tasks_count": 1}}
         )
 
-        # Broadcast task
-        await broadcast_event(
-            tenant_id,
-            "task",
-            "insert",
-            {
-                "task_id": task_id,
-                "title": task["title"],
-                "patient_name": task["patient_name"],
-            },
-        )
-
-    # Broadcast document update
-    await broadcast_event(
-        tenant_id, "document", "update", {"document_id": document_id, "status": status}
-    )
-
 
 # ==================== TASK ROUTES ====================
 
@@ -548,10 +471,9 @@ async def list_tasks(
     priority: Optional[str] = None,
     limit: int = 50,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     query = {"tenant_id": tenant_id}
     if state:
@@ -585,11 +507,12 @@ async def list_tasks(
 
 
 @app.post("/api/tasks")
-async def create_task(
-    task_data: TaskCreate, current_user: dict = Depends(get_current_user)
-):
+async def create_task(task_data: TaskCreate):
+    from database import get_client
+
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    client = get_client()
+    tenant_id = DEFAULT_TENANT
 
     # Get patient name
     patient = await db.patients.find_one(
@@ -617,32 +540,32 @@ async def create_task(
         "waiting_minutes": 0,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
-        "created_by": current_user["user_id"],
+        "created_by": "demo-user",
     }
 
-    await db.tasks.insert_one(task)
-
-    # Increment patient task count
-    await db.patients.update_one(
-        {"_id": task_data.patient_id}, {"$inc": {"tasks_count": 1}}
-    )
-
-    # Broadcast event
-    await broadcast_event(
-        tenant_id, "task", "insert", {"task_id": task_id, "title": task["title"]}
-    )
+    # Use transaction to ensure atomicity
+    if client:
+        async with client.start_session() as session:
+            async with session.start_transaction():
+                await db.tasks.insert_one(task, session=session)
+                await db.patients.update_one(
+                    {"_id": task_data.patient_id},
+                    {"$inc": {"tasks_count": 1}},
+                    session=session,
+                )
+    else:
+        await db.tasks.insert_one(task)
+        await db.patients.update_one(
+            {"_id": task_data.patient_id}, {"$inc": {"tasks_count": 1}}
+        )
 
     return {"task_id": task_id, "message": "Task created successfully"}
 
 
 @app.patch("/api/tasks/{task_id}")
-async def update_task(
-    task_id: str,
-    update_data: TaskUpdate,
-    current_user: dict = Depends(get_current_user),
-):
+async def update_task(task_id: str, update_data: TaskUpdate):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     update_fields = {}
     if update_data.state:
@@ -650,7 +573,7 @@ async def update_task(
     if update_data.comment:
         update_fields["$push"] = {
             "comments": {
-                "user_id": current_user["user_id"],
+                "user_id": "demo-user",
                 "text": update_data.comment,
                 "created_at": datetime.now(timezone.utc),
             }
@@ -665,11 +588,6 @@ async def update_task(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Broadcast event
-    await broadcast_event(
-        tenant_id, "task", "update", {"task_id": task_id, "state": update_data.state}
-    )
-
     return {"message": "Task updated successfully"}
 
 
@@ -682,10 +600,9 @@ async def list_claims(
     patient_id: Optional[str] = None,
     limit: int = 50,
     skip: int = 0,
-    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     query = {"tenant_id": tenant_id}
     if status:
@@ -713,11 +630,9 @@ async def list_claims(
 
 
 @app.post("/api/claims")
-async def create_claim(
-    claim_data: ClaimCreate, current_user: dict = Depends(get_current_user)
-):
+async def create_claim(claim_data: ClaimCreate):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     # Get patient
     patient = await db.patients.find_one(
@@ -765,14 +680,6 @@ async def create_claim(
 
     await db.claim_events.insert_one(event)
 
-    # Broadcast event
-    await broadcast_event(
-        tenant_id,
-        "claim",
-        "insert",
-        {"claim_id": claim_id, "patient_name": claim["patient_name"]},
-    )
-
     return {
         "claim_id": claim_id,
         "claim_id_display": claim_id_display,
@@ -782,9 +689,9 @@ async def create_claim(
 
 
 @app.get("/api/claims/{claim_id}")
-async def get_claim(claim_id: str, current_user: dict = Depends(get_current_user)):
+async def get_claim(claim_id: str):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     claim = await db.claims.find_one({"_id": claim_id, "tenant_id": tenant_id})
     if not claim:
@@ -806,11 +713,9 @@ async def get_claim(claim_id: str, current_user: dict = Depends(get_current_user
 
 
 @app.get("/api/claims/{claim_id}/events")
-async def get_claim_events(
-    claim_id: str, current_user: dict = Depends(get_current_user)
-):
+async def get_claim_events(claim_id: str):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     cursor = db.claim_events.find({"claim_id": claim_id, "tenant_id": tenant_id}).sort(
         "at", 1
@@ -838,10 +743,9 @@ async def list_appointments(
     provider_id: Optional[str] = None,
     patient_id: Optional[str] = None,
     limit: int = 50,
-    current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     query = {"tenant_id": tenant_id}
     if provider_id:
@@ -865,9 +769,18 @@ async def list_appointments(
     cursor = db.appointments.find(query).sort("starts_at", 1).limit(limit)
     appointments = await cursor.to_list(length=limit)
 
+    # Get all unique patient IDs
+    patient_ids = list(set(apt["patient_id"] for apt in appointments))
+
+    # Batch fetch all patients
+    patients_cursor = db.patients.find({"_id": {"$in": patient_ids}})
+    patients_list = await patients_cursor.to_list(length=len(patient_ids))
+    patients_map = {p["_id"]: p for p in patients_list}
+
+    # Build result with patient data from map
     result = []
     for apt in appointments:
-        patient = await db.patients.find_one({"_id": apt["patient_id"]})
+        patient = patients_map.get(apt["patient_id"])
         result.append(
             {
                 "appointment_id": apt["_id"],
@@ -891,11 +804,12 @@ async def list_appointments(
 
 
 @app.post("/api/appointments")
-async def create_appointment(
-    appointment_data: AppointmentCreate, current_user: dict = Depends(get_current_user)
-):
+async def create_appointment(appointment_data: AppointmentCreate):
+    from database import get_client
+
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    client = get_client()
+    tenant_id = DEFAULT_TENANT
 
     appointment_id = str(uuid.uuid4())
 
@@ -918,20 +832,21 @@ async def create_appointment(
         "updated_at": datetime.now(timezone.utc),
     }
 
-    await db.appointments.insert_one(appointment)
-
-    # Increment patient appointment count
-    await db.patients.update_one(
-        {"_id": appointment_data.patient_id}, {"$inc": {"appointments_count": 1}}
-    )
-
-    # Broadcast event
-    await broadcast_event(
-        tenant_id,
-        "appointment",
-        "insert",
-        {"appointment_id": appointment_id, "patient_id": appointment_data.patient_id},
-    )
+    # Use transaction to ensure atomicity
+    if client:
+        async with client.start_session() as session:
+            async with session.start_transaction():
+                await db.appointments.insert_one(appointment, session=session)
+                await db.patients.update_one(
+                    {"_id": appointment_data.patient_id},
+                    {"$inc": {"appointments_count": 1}},
+                    session=session,
+                )
+    else:
+        await db.appointments.insert_one(appointment)
+        await db.patients.update_one(
+            {"_id": appointment_data.patient_id}, {"$inc": {"appointments_count": 1}}
+        )
 
     return {
         "appointment_id": appointment_id,
@@ -947,9 +862,9 @@ async def create_appointment(
 
 
 @app.get("/api/dashboard/stats")
-async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
+async def get_dashboard_stats():
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     pending_tasks = await db.tasks.count_documents(
         {"tenant_id": tenant_id, "state": TaskState.OPEN}
@@ -981,10 +896,10 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 
 
 @app.get("/api/dashboard/appointments")
-async def get_dashboard_appointments(current_user: dict = Depends(get_current_user)):
+async def get_dashboard_appointments():
     """Get today's appointments for dashboard"""
     db = get_db()
-    tenant_id = current_user["tenant_id"]
+    tenant_id = DEFAULT_TENANT
 
     today = datetime.now(timezone.utc).date()
     cursor = db.appointments.find(
@@ -996,9 +911,9 @@ async def get_dashboard_appointments(current_user: dict = Depends(get_current_us
             },
         }
     ).sort("starts_at", 1)
-    
+
     appointments = await cursor.to_list(length=None)
-    
+
     result = []
     for apt in appointments:
         result.append({
@@ -1008,51 +923,8 @@ async def get_dashboard_appointments(current_user: dict = Depends(get_current_us
             "appointment_type": apt.get("appointment_type", "consultation"),
             "provider_id": apt.get("provider_id"),
         })
-    
+
     return result
-
-
-# ==================== SSE STREAMING ROUTE ====================
-
-
-@app.get("/api/stream/events/{tenant_id}")
-async def stream_events(tenant_id: str):
-    """Server-Sent Events endpoint for real-time updates"""
-
-    async def event_generator():
-        # Create queue for this connection
-        q = queue.Queue(maxsize=100)
-
-        # Register queue for tenant
-        if tenant_id not in event_queues:
-            event_queues[tenant_id] = []
-        event_queues[tenant_id].append(q)
-
-        try:
-            # Send initial connection message
-            yield f"data: {json.dumps({'type': 'connected', 'tenant_id': tenant_id})}\n\n"
-
-            while True:
-                # Wait for events with timeout
-                try:
-                    event = q.get(timeout=30)
-                    yield f"data: {json.dumps(event)}\n\n"
-                except queue.Empty:
-                    # Send keepalive ping
-                    yield f"data: {json.dumps({'type': 'ping'})}\n\n"
-        except asyncio.CancelledError:
-            # Client disconnected
-            pass
-        finally:
-            # Cleanup
-            if tenant_id in event_queues:
-                event_queues[tenant_id].remove(q)
-                if not event_queues[tenant_id]:
-                    del event_queues[tenant_id]
-
-    return StreamingResponse(
-        event_generator(), media_type="text/event-stream"
-    )
 
 
 # ==================== COPILOT ENDPOINT ====================
@@ -1065,3 +937,4 @@ async def copilot_endpoint(request: dict):
         "response": "I'm here to help with BacklineMD. How can I assist you today?",
         "context": "Dashboard",
     }
+

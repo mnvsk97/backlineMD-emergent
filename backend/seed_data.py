@@ -1,11 +1,11 @@
 """
-Comprehensive seed data for BacklineMD hackathon demo
+Enhanced seed data with specific patient journey stages
 Run with: python seed_data.py
 """
 
 import asyncio
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -13,7 +13,62 @@ from motor.motor_asyncio import AsyncIOMotorClient
 MONGO_URL = "mongodb://localhost:27017"
 DEFAULT_TENANT = "hackathon-demo"
 
-# Sample data
+# Staff names
+DOCTORS = ["Dr. James O'Brien", "Dr. Sarah Chen", "Dr. Michael Rodriguez"]
+BACKOFFICE_STAFF = [
+    "Emily Parker - Insurance Coordinator",
+    "David Kim - Records Manager",
+]
+
+# Agent types
+AGENT_TYPES = [
+    "AI - Document Extractor",
+    "AI - Insurance Verifier",
+    "AI - Onboarding Agent",
+    "AI - Prior Auth Agent",
+    "AI - Claim Status Checker",
+]
+
+# Patient statuses
+PATIENT_STATUSES = [
+    "Active - Routine Care",
+    "Active - Under Treatment",
+    "Pending - Awaiting Documentation",
+    "Pending - Insurance Verification",
+    "Urgent - Requires Immediate Attention",
+    "Follow-up Required",
+]
+
+# Task priorities
+TASK_PRIORITIES = ["urgent", "high", "medium", "low"]
+
+# Document statuses
+DOCUMENT_STATUSES = [
+    "uploaded",
+    "ingesting",
+    "ingested",
+    "not_ingested",
+    "approved",
+    "rejected",
+]
+
+# Consent form statuses
+CONSENT_FORM_STATUSES = ["to_do", "sent", "in_progress", "signed"]
+
+# Claim statuses
+CLAIM_STATUSES = [
+    "pending",
+    "submitted",
+    "received",
+    "under_review",
+    "approved",
+    "denied",
+]
+
+# Task states
+TASK_STATES = ["open", "in_progress", "done", "cancelled"]
+
+# Enhanced patient data with statuses
 PATIENTS = [
     {
         "first_name": "Alex",
@@ -25,6 +80,8 @@ PATIENTS = [
         "phone": "+1-555-0101",
         "preconditions": ["Family history of heart disease", "Elevated cholesterol"],
         "profile_image": "https://i.pravatar.cc/150?img=12",
+        "status": "Active - Under Treatment",
+        "stage": "blood_report_review",
     },
     {
         "first_name": "Maria",
@@ -36,6 +93,8 @@ PATIENTS = [
         "phone": "+1-555-0102",
         "preconditions": ["Diabetes Type 2", "Hypertension"],
         "profile_image": "https://i.pravatar.cc/150?img=45",
+        "status": "Pending - Awaiting Documentation",
+        "stage": "consent_forms_needed",
     },
     {
         "first_name": "James",
@@ -47,6 +106,8 @@ PATIENTS = [
         "phone": "+1-555-0103",
         "preconditions": ["Hypertension", "Sleep apnea"],
         "profile_image": "https://i.pravatar.cc/150?img=33",
+        "status": "Active - Routine Care",
+        "stage": "ready_for_consultation",
     },
     {
         "first_name": "Sarah",
@@ -58,6 +119,8 @@ PATIENTS = [
         "phone": "+1-555-0104",
         "preconditions": ["Asthma", "Allergies"],
         "profile_image": "https://i.pravatar.cc/150?img=23",
+        "status": "Pending - Insurance Verification",
+        "stage": "insurance_resubmit",
     },
     {
         "first_name": "Michael",
@@ -69,6 +132,8 @@ PATIENTS = [
         "phone": "+1-555-0105",
         "preconditions": ["Obesity", "Pre-diabetes", "High blood pressure"],
         "profile_image": "https://i.pravatar.cc/150?img=52",
+        "status": "Urgent - Requires Immediate Attention",
+        "stage": "urgent_followup",
     },
     {
         "first_name": "Emily",
@@ -80,6 +145,8 @@ PATIENTS = [
         "phone": "+1-555-0106",
         "preconditions": ["Anxiety disorder", "Hypothyroidism"],
         "profile_image": "https://i.pravatar.cc/150?img=38",
+        "status": "Follow-up Required",
+        "stage": "medication_review",
     },
     {
         "first_name": "Robert",
@@ -91,6 +158,8 @@ PATIENTS = [
         "phone": "+1-555-0107",
         "preconditions": ["Coronary artery disease", "Type 2 diabetes", "Arthritis"],
         "profile_image": "https://i.pravatar.cc/150?img=60",
+        "status": "Active - Under Treatment",
+        "stage": "prior_auth_pending",
     },
     {
         "first_name": "Jennifer",
@@ -102,6 +171,8 @@ PATIENTS = [
         "phone": "+1-555-0108",
         "preconditions": ["Migraine", "GERD"],
         "profile_image": "https://i.pravatar.cc/150?img=47",
+        "status": "Active - Routine Care",
+        "stage": "routine_checkup",
     },
 ]
 
@@ -118,25 +189,6 @@ FORM_TEMPLATES = [
     },
 ]
 
-DOCUMENTS = [
-    {
-        "kind": "lab",
-        "file_name": "Blood Test Results - Oct 2024.pdf",
-        "status": "uploaded",
-    },
-    {
-        "kind": "imaging",
-        "file_name": "X-Ray Chest - Sep 2024.pdf",
-        "status": "uploaded",
-    },
-    {
-        "kind": "medical_history",
-        "file_name": "Medical History Summary.pdf",
-        "status": "uploaded",
-    },
-    {"kind": "lab", "file_name": "A1C Test Results.pdf", "status": "uploaded"},
-]
-
 
 def generate_ngrams(text: str, n: int = 3):
     """Generate n-grams for search"""
@@ -148,7 +200,7 @@ async def seed_database():
     client = AsyncIOMotorClient(MONGO_URL)
     db = client.backlinemd
 
-    print("🌱 Starting seed data creation...")
+    print("🌱 Starting enhanced seed data creation...")
     print(f"   Tenant: {DEFAULT_TENANT}")
     print("")
 
@@ -177,8 +229,8 @@ async def seed_database():
                 **template,
                 "template_url": f"/templates/{template_id}.pdf",
                 "is_active": True,
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
             }
         )
         template_ids.append(template_id)
@@ -187,7 +239,7 @@ async def seed_database():
 
     # Create patients
     print("👥 Creating patients...")
-    patient_ids = []
+    patient_data_list = []
     for patient_data in PATIENTS:
         patient_id = str(uuid4())
         mrn = f"MRN{random.randint(100000, 999999)}"
@@ -212,177 +264,426 @@ async def seed_database():
             "flags": [],
             "latest_vitals": {},
             "profile_image": patient_data["profile_image"],
-            "status": random.choice([
-                "Intake In Progress",
-                "Intake Done",
-                "Doc Collection In Progress",
-                "Consultation Scheduled",
-                "Review Done"
-            ]),
+            "status": patient_data["status"],
             "tasks_count": 0,
             "appointments_count": 0,
             "flagged_count": 0,
             "search": {"ngrams": ngrams},
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
         }
 
         await db.patients.insert_one(patient)
-        patient_ids.append((patient_id, full_name))
-        print(
-            f"   ✓ {full_name} (Age: {patient_data['age']}, {patient_data['gender']})"
-        )
+        patient_data_list.append((patient_id, full_name, patient_data["stage"]))
+        print(f"   ✓ {full_name} - {patient_data['status']}")
     print("")
 
-    # Create documents for first 3 patients
-    print("📄 Creating documents...")
-    doc_count = 0
-    for i in range(3):
-        patient_id, patient_name = patient_ids[i]
-        for doc_template in DOCUMENTS[:2]:  # 2 docs per patient
-            document_id = str(uuid4())
-            doc = {
-                "_id": document_id,
+    # Create stage-specific documents and tasks
+    print("📄 Creating documents and tasks by patient stage...")
+
+    # PATIENT 1: Blood Report Review Stage
+    patient_id, patient_name, stage = patient_data_list[0]
+    print(f"\n   Patient 1: {patient_name}")
+
+    # Add blood report document
+    doc_id = str(uuid4())
+    await db.documents.insert_one(
+        {
+            "_id": doc_id,
+            "tenant_id": DEFAULT_TENANT,
+            "patient_id": patient_id,
+            "kind": "lab",
+            "file": {
+                "url": f"/uploads/{doc_id}/Blood_Test_Results_Oct_2024.pdf",
+                "name": "Blood Test Results - Oct 2024.pdf",
+                "mime": "application/pdf",
+                "size": 245000,
+                "sha256": f"hash-{doc_id[:8]}",
+            },
+            "ocr": {"done": True, "engine": "tesseract"},
+            "extracted": {
+                "fields": {
+                    "cholesterol": "245 mg/dL",
+                    "ldl": "165 mg/dL",
+                    "hdl": "42 mg/dL",
+                    "triglycerides": "195 mg/dL",
+                },
+                "confidence": 0.92,
+            },
+            "status": "ingested",
+            "created_at": datetime.now(timezone.utc) - timedelta(days=2),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    print(f"      ✓ Added blood report (ingested)")
+
+    # Add task for blood report review
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
+            "_id": task_id,
+            "task_id": f"T{random.randint(10000, 99999)}",
+            "tenant_id": DEFAULT_TENANT,
+            "source": "agent",
+            "kind": "document_review",
+            "title": f"Review Blood Test Results - {patient_name}",
+            "description": "Recent blood work shows elevated cholesterol (245 mg/dL) and low HDL (42 mg/dL). Please review results and recommend treatment plan. Consider statin therapy.",
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "doc_id": doc_id,
+            "assigned_to": DOCTORS[0],
+            "agent_type": "ai_agent",
+            "priority": "high",
+            "state": "open",
+            "confidence_score": 0.92,
+            "waiting_minutes": 45,
+            "created_at": datetime.now(timezone.utc) - timedelta(hours=2),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Created task: Review blood report (HIGH priority)")
+
+    # PATIENT 2: Consent Forms Needed Stage
+    patient_id, patient_name, stage = patient_data_list[1]
+    print(f"\n   Patient 2: {patient_name}")
+
+    # Add uploaded documents
+    for doc_name in [
+        "Medical History Summary.pdf",
+        "Insurance Card Front.pdf",
+        "Insurance Card Back.pdf",
+    ]:
+        doc_id = str(uuid4())
+        await db.documents.insert_one(
+            {
+                "_id": doc_id,
                 "tenant_id": DEFAULT_TENANT,
                 "patient_id": patient_id,
-                "kind": doc_template["kind"],
+                "kind": "medical_history",
                 "file": {
-                    "url": f"/uploads/{document_id}/{doc_template['file_name']}",
-                    "name": doc_template["file_name"],
+                    "url": f"/uploads/{doc_id}/{doc_name}",
+                    "name": doc_name,
                     "mime": "application/pdf",
-                    "size": random.randint(100000, 500000),
-                    "sha256": f"hash-{document_id[:8]}",
+                    "size": random.randint(150000, 350000),
+                    "sha256": f"hash-{doc_id[:8]}",
                 },
                 "ocr": {"done": True, "engine": "tesseract"},
-                "extracted": {
-                    "fields": {
-                        "test_type": (
-                            "Blood Panel" if doc_template["kind"] == "lab" else "X-Ray"
-                        ),
-                        "date": "2024-10-15",
-                        "result": "Normal",
-                    },
-                    "confidence": 0.92,
-                },
-                "status": doc_template["status"],
-                "created_at": datetime.utcnow() - timedelta(days=random.randint(1, 30)),
-                "updated_at": datetime.utcnow(),
+                "extracted": {"fields": {}, "confidence": 0.88},
+                "status": "ingested",
+                "created_at": datetime.now(timezone.utc) - timedelta(days=1),
+                "updated_at": datetime.now(timezone.utc),
             }
-            await db.documents.insert_one(doc)
-            doc_count += 1
-    print(f"   ✓ Created {doc_count} documents")
-    print("")
+        )
+    print(f"      ✓ Added 3 documents (all ingested)")
 
-    # Create consent forms
-    print("📝 Creating consent forms...")
-    form_statuses = ["to_do", "sent", "signed"]
-    form_count = 0
-    for i, (patient_id, patient_name) in enumerate(patient_ids[:5]):
-        for j, template_id in enumerate(template_ids):
-            template = FORM_TEMPLATES[j]
-            status = form_statuses[i % 3]
+    # Add task for sending consent forms
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
+            "_id": task_id,
+            "task_id": f"T{random.randint(10000, 99999)}",
+            "tenant_id": DEFAULT_TENANT,
+            "source": "agent",
+            "kind": "consent_forms",
+            "title": f"Send Consent Forms - {patient_name}",
+            "description": "All medical records and insurance documentation have been uploaded and verified. Ready to send consent forms for insurance information release and medical records request via DocuSign.",
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "assigned_to": BACKOFFICE_STAFF[0],
+            "agent_type": "human",
+            "priority": "medium",
+            "state": "open",
+            "confidence_score": 1.0,
+            "waiting_minutes": 120,
+            "created_at": datetime.now(timezone.utc) - timedelta(hours=5),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Created task: Send consent forms (MEDIUM priority)")
 
-            form_data = {
-                "_id": str(uuid4()),
+    # PATIENT 3: Ready for Consultation Stage
+    patient_id, patient_name, stage = patient_data_list[2]
+    print(f"\n   Patient 3: {patient_name}")
+
+    # Add signed consent forms
+    for i, template_id in enumerate(template_ids):
+        template = FORM_TEMPLATES[i]
+        form_id = str(uuid4())
+        await db.consent_forms.insert_one(
+            {
+                "_id": form_id,
                 "tenant_id": DEFAULT_TENANT,
                 "patient_id": patient_id,
                 "form_template_id": template_id,
                 "name": template["name"],
                 "description": template["description"],
                 "purpose": template["purpose"],
-                "status": status,
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow(),
-            }
-
-            if status in ["sent", "signed"]:
-                form_data["sent_date"] = datetime.utcnow() - timedelta(
-                    days=random.randint(1, 10)
-                )
-
-            if status == "signed":
-                form_data["signed_date"] = datetime.utcnow() - timedelta(
-                    days=random.randint(1, 5)
-                )
-                form_data["docusign"] = {
-                    "envelope_id": f"env-{str(uuid4())[:8]}",
+                "status": "signed",
+                "sent_date": datetime.now(timezone.utc) - timedelta(days=7),
+                "signed_date": datetime.now(timezone.utc) - timedelta(days=5),
+                "docusign": {
+                    "envelope_id": f"env-{form_id[:8]}",
                     "status": "completed",
-                    "signed_document_url": f"/signed/{form_data['_id']}.pdf",
-                }
+                    "signed_document_url": f"/signed/{form_id}.pdf",
+                },
+                "created_at": datetime.now(timezone.utc) - timedelta(days=8),
+                "updated_at": datetime.now(timezone.utc) - timedelta(days=5),
+            }
+        )
+    print(f"      ✓ Added 2 signed consent forms")
 
-            await db.consent_forms.insert_one(form_data)
-            form_count += 1
-    print(f"   ✓ Created {form_count} consent forms")
-    print("")
-
-    # Create tasks
-    print("✅ Creating tasks...")
-    for i in range(3):
-        patient_id, patient_name = patient_ids[i]
-        task_id = str(uuid4())
-        task = {
+    # Add task for scheduling consultation
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
             "_id": task_id,
             "task_id": f"T{random.randint(10000, 99999)}",
             "tenant_id": DEFAULT_TENANT,
             "source": "agent",
-            "kind": "document_review",
-            "title": f"Verify Medical History Extraction - {patient_name}",
-            "description": f"Review extracted data from recent upload. Confidence: {random.randint(85, 92)}%. Please verify key findings.",
+            "kind": "schedule_consultation",
+            "title": f"Schedule Initial Consultation - {patient_name}",
+            "description": "All medical records submitted and consent forms signed. Patient is ready for initial consultation. Please schedule appointment and send calendar invite.",
             "patient_id": patient_id,
             "patient_name": patient_name,
-            "assigned_to": "Dr. James O'Brien",
-            "agent_type": "ai_agent",
-            "priority": random.choice(["high", "medium", "urgent"]),
+            "assigned_to": BACKOFFICE_STAFF[1],
+            "agent_type": "human",
+            "priority": "medium",
             "state": "open",
-            "confidence_score": random.uniform(0.85, 0.92),
-            "waiting_minutes": random.randint(10, 120),
-            "created_at": datetime.utcnow() - timedelta(hours=random.randint(1, 48)),
-            "updated_at": datetime.utcnow(),
+            "confidence_score": 1.0,
+            "waiting_minutes": 180,
+            "created_at": datetime.now(timezone.utc) - timedelta(hours=7),
+            "updated_at": datetime.now(timezone.utc),
         }
-        await db.tasks.insert_one(task)
-        await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
-    print(f"   ✓ Created 3 tasks")
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Created task: Schedule consultation (MEDIUM priority)")
+
+    # PATIENT 4: Insurance Resubmit Stage
+    patient_id, patient_name, stage = patient_data_list[3]
+    print(f"\n   Patient 4: {patient_name}")
+
+    # Add task for insurance resubmission
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
+            "_id": task_id,
+            "task_id": f"T{random.randint(10000, 99999)}",
+            "tenant_id": DEFAULT_TENANT,
+            "source": "agent",
+            "kind": "insurance_verification",
+            "title": f"Resubmit Insurance Details - {patient_name}",
+            "description": "Prior authorization request was denied due to missing policy holder information. Please contact patient to obtain complete insurance details including policy holder name, date of birth, and policy effective date.",
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "assigned_to": BACKOFFICE_STAFF[0],
+            "agent_type": "ai_agent",
+            "priority": "high",
+            "state": "open",
+            "confidence_score": 0.95,
+            "waiting_minutes": 90,
+            "created_at": datetime.now(timezone.utc) - timedelta(hours=4),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Created task: Resubmit insurance (HIGH priority)")
+
+    # PATIENT 5-8: Additional varied tasks
+    print(f"\n   Additional patients (5-8):")
+
+    # Patient 5: Urgent follow-up
+    patient_id, patient_name, _ = patient_data_list[4]
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
+            "_id": task_id,
+            "task_id": f"T{random.randint(10000, 99999)}",
+            "tenant_id": DEFAULT_TENANT,
+            "source": "manual",
+            "kind": "urgent_followup",
+            "title": f"URGENT: Follow-up on Abnormal A1C - {patient_name}",
+            "description": "Patient's A1C levels came back at 9.2%, indicating poorly controlled diabetes. Immediate follow-up required to adjust medication and discuss lifestyle changes. Patient has missed previous appointment.",
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "assigned_to": DOCTORS[1],
+            "agent_type": "human",
+            "priority": "urgent",
+            "state": "open",
+            "confidence_score": 1.0,
+            "waiting_minutes": 30,
+            "created_at": datetime.now(timezone.utc) - timedelta(hours=1),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Patient 5: Urgent follow-up task")
+
+    # Patient 6: Medication review
+    patient_id, patient_name, _ = patient_data_list[5]
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
+            "_id": task_id,
+            "task_id": f"T{random.randint(10000, 99999)}",
+            "tenant_id": DEFAULT_TENANT,
+            "source": "agent",
+            "kind": "medication_review",
+            "title": f"Medication Interaction Check - {patient_name}",
+            "description": "Patient recently started new anxiety medication. AI detected potential interaction with thyroid medication. Please review current medication list and adjust dosages if necessary.",
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "assigned_to": DOCTORS[0],
+            "agent_type": "ai_agent",
+            "priority": "high",
+            "state": "open",
+            "confidence_score": 0.87,
+            "waiting_minutes": 200,
+            "created_at": datetime.now(timezone.utc) - timedelta(hours=8),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Patient 6: Medication review task")
+
+    # Patient 7: Prior auth
+    patient_id, patient_name, _ = patient_data_list[6]
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
+            "_id": task_id,
+            "task_id": f"T{random.randint(10000, 99999)}",
+            "tenant_id": DEFAULT_TENANT,
+            "source": "agent",
+            "kind": "prior_authorization",
+            "title": f"Submit Prior Authorization - {patient_name}",
+            "description": "Cardiologist recommended cardiac catheterization. Need to submit prior authorization to Medicare with supporting documentation including recent stress test results and medication history.",
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "assigned_to": BACKOFFICE_STAFF[0],
+            "agent_type": "ai_agent",
+            "priority": "medium",
+            "state": "in_progress",
+            "confidence_score": 0.91,
+            "waiting_minutes": 300,
+            "created_at": datetime.now(timezone.utc) - timedelta(days=1),
+            "updated_at": datetime.now(timezone.utc) - timedelta(hours=3),
+        }
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Patient 7: Prior auth task (IN PROGRESS)")
+
+    # Patient 8: Routine checkup
+    patient_id, patient_name, _ = patient_data_list[7]
+    task_id = str(uuid4())
+    await db.tasks.insert_one(
+        {
+            "_id": task_id,
+            "task_id": f"T{random.randint(10000, 99999)}",
+            "tenant_id": DEFAULT_TENANT,
+            "source": "agent",
+            "kind": "routine_checkup",
+            "title": f"Schedule Annual Checkup - {patient_name}",
+            "description": "Patient is due for annual preventive care visit. Send reminder and schedule appointment. Include flu shot and routine bloodwork orders.",
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "assigned_to": BACKOFFICE_STAFF[1],
+            "agent_type": "human",
+            "priority": "low",
+            "state": "open",
+            "confidence_score": 1.0,
+            "waiting_minutes": 500,
+            "created_at": datetime.now(timezone.utc) - timedelta(days=2),
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    print(f"      ✓ Patient 8: Routine checkup task (LOW priority)")
+
     print("")
 
     # Create appointments
-    print("📅 Creating appointments...")
-    for i in range(4):
-        patient_id, patient_name = patient_ids[i]
+    print("📅 Creating appointments with varied types...")
+    appointment_types = [
+        {
+            "type": "initial_consultation",
+            "title": "Initial Consultation",
+            "duration": 60,
+        },
+        {"type": "follow_up", "title": "Follow-up Visit", "duration": 30},
+        {"type": "procedure", "title": "Minor Procedure", "duration": 90},
+        {"type": "telehealth", "title": "Telehealth Check-in", "duration": 20},
+        {"type": "lab_review", "title": "Lab Results Review", "duration": 30},
+        {"type": "consultation", "title": "Specialist Consultation", "duration": 45},
+    ]
+
+    for i in range(6):
+        patient_id, patient_name, _ = patient_data_list[i]
+        apt_type = appointment_types[i]
         apt_id = str(uuid4())
-        starts_at = datetime.utcnow() + timedelta(hours=2 + i * 2)
+        starts_at = datetime.now(timezone.utc) + timedelta(hours=2 + i * 2)
+
         appointment = {
             "_id": apt_id,
             "tenant_id": DEFAULT_TENANT,
             "patient_id": patient_id,
             "provider_id": "demo-user",
-            "type": random.choice(["consultation", "follow_up", "procedure"]),
-            "title": f"{random.choice(['Follow-up', 'Initial', 'Routine'])} Consultation",
+            "provider_name": DOCTORS[i % 3],
+            "type": apt_type["type"],
+            "title": apt_type["title"],
             "starts_at": starts_at,
-            "ends_at": starts_at + timedelta(hours=1),
-            "location": f"Room {100 + i}",
+            "ends_at": starts_at + timedelta(minutes=apt_type["duration"]),
+            "location": (
+                f"Room {100 + i}" if apt_type["type"] != "telehealth" else "Virtual"
+            ),
             "status": "scheduled",
             "google_calendar": {
                 "event_id": f"gcal-{apt_id[:8]}",
                 "calendar_id": "primary",
+                "event_link": f"https://calendar.google.com/event?eid={apt_id[:10]}",
             },
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "composio_metadata": {
+                "action_id": f"composio-{apt_id[:8]}",
+                "calendar_service": "google",
+            },
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
         }
         await db.appointments.insert_one(appointment)
         await db.patients.update_one(
             {"_id": patient_id}, {"$inc": {"appointments_count": 1}}
         )
-    print(f"   ✓ Created 4 appointments")
+        print(
+            f"   ✓ {patient_name}: {apt_type['title']} at {starts_at.strftime('%I:%M %p')}"
+        )
     print("")
 
-    # Create claims
-    print("💰 Creating insurance claims...")
-    insurance_providers = ["Blue Shield", "Aetna", "UnitedHealthcare", "Cigna"]
-    for i in range(4):
-        patient_id, patient_name = patient_ids[i]
+    # Create claims with varied statuses
+    print("💰 Creating insurance claims with varied statuses...")
+    insurance_providers = [
+        "Blue Shield",
+        "Aetna",
+        "UnitedHealthcare",
+        "Cigna",
+        "Medicare",
+        "Medicaid",
+    ]
+    claim_statuses_varied = [
+        "pending",
+        "submitted",
+        "under_review",
+        "approved",
+        "denied",
+        "received",
+    ]
+
+    for i in range(6):
+        patient_id, patient_name, _ = patient_data_list[i]
         claim_id = str(uuid4())
         claim_id_display = f"C{random.randint(10000, 99999)}"
-        amount = random.choice([1500, 2500, 3500, 4200])
+        amount = random.choice([1500, 2500, 3500, 4200, 5800])
+        status = claim_statuses_varied[i]
 
         claim = {
             "_id": claim_id,
@@ -390,32 +691,26 @@ async def seed_database():
             "tenant_id": DEFAULT_TENANT,
             "patient_id": patient_id,
             "patient_name": patient_name,
-            "insurance_provider": insurance_providers[i % 4],
+            "insurance_provider": insurance_providers[i],
             "amount": amount * 100,
             "amount_display": amount,
             "procedure_code": f"99{random.randint(213, 215)}",
-            "diagnosis_code": random.choice(["Z00.00", "E11.9", "I10"]),
+            "diagnosis_code": random.choice(["Z00.00", "E11.9", "I10", "J45.9"]),
             "service_date": (
-                datetime.utcnow() - timedelta(days=random.randint(5, 30))
+                datetime.now(timezone.utc) - timedelta(days=random.randint(10, 45))
             ).strftime("%Y-%m-%d"),
             "submitted_date": (
-                datetime.utcnow() - timedelta(days=random.randint(1, 15))
+                datetime.now(timezone.utc) - timedelta(days=random.randint(5, 20))
             ).strftime("%Y-%m-%d"),
             "description": "Medical consultation with diagnostic tests",
-            "status": random.choice([
-                "pending",
-                "submitted",
-                "under_review",
-                "approved",
-                "settlement_in_progress"
-            ]),
-            "last_event_at": datetime.utcnow(),
-            "created_at": datetime.utcnow() - timedelta(days=random.randint(1, 20)),
-            "updated_at": datetime.utcnow(),
+            "status": status,
+            "last_event_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc) - timedelta(days=random.randint(5, 25)),
+            "updated_at": datetime.now(timezone.utc),
         }
         await db.claims.insert_one(claim)
 
-        # Create claim event
+        # Create claim events
         event = {
             "_id": str(uuid4()),
             "tenant_id": DEFAULT_TENANT,
@@ -427,23 +722,32 @@ async def seed_database():
             "created_at": claim["created_at"],
         }
         await db.claim_events.insert_one(event)
-    print(f"   ✓ Created 4 claims with events")
+
+        print(f"   ✓ {patient_name}: ${amount} - {status}")
     print("")
 
     client.close()
 
-    print("✅ Seed data creation complete!")
+    print("✅ Enhanced seed data creation complete!")
     print("")
-    print("Summary:")
-    print(f"   - {len(PATIENTS)} patients")
-    print(f"   - {doc_count} documents")
-    print(f"   - {form_count} consent forms")
-    print(f"   - {len(template_ids)} form templates")
-    print(f"   - 3 tasks")
-    print(f"   - 4 appointments")
-    print(f"   - 4 claims")
+    print("📊 Summary:")
+    print(f"   - {len(PATIENTS)} patients (varied statuses)")
+    print(f"   - 8+ tasks (varied priorities & stages)")
+    print(f"   - 6 appointments (varied types)")
+    print(f"   - 6 claims (varied statuses)")
+    print(f"   - Multiple documents (varied statuses)")
+    print(f"   - Consent forms (varied statuses)")
+    print("")
+    print("👥 Staff:")
+    print(f"   Doctors: {', '.join(DOCTORS)}")
+    print(f"   Back Office: {', '.join(BACKOFFICE_STAFF)}")
+    print("")
+    print("🤖 AI Agents:")
+    for agent in AGENT_TYPES:
+        print(f"   - {agent}")
     print("")
 
 
 if __name__ == "__main__":
     asyncio.run(seed_database())
+

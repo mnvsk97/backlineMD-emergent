@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { DollarSign, Mail, Phone, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
@@ -7,9 +6,7 @@ import Header from '../components/Header';
 import CreateTaskModal from '../components/CreateTaskModal';
 import ClaimDetailModal from '../components/ClaimDetailModal';
 import CreateClaimModal from '../components/CreateClaimModal';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { apiService } from '../services/api';
 
 const TreasuryPage = () => {
   const { openChat } = useChat();
@@ -24,7 +21,7 @@ const TreasuryPage = () => {
 
   const fetchClaims = useCallback(async () => {
     try {
-      const response = await axios.get(`${API}/claims`);
+      const response = await apiService.getClaims();
       setClaims(response.data);
     } catch (error) {
       console.error('Error fetching claims:', error);

@@ -36,8 +36,11 @@ class DocumentKind(str, Enum):
 
 
 class DocumentStatus(str, Enum):
-    """Simplified document status - just uploaded"""
+    """Document status values"""
     UPLOADED = "uploaded"
+    INGESTING = "ingesting"
+    INGESTED = "ingested"
+    NOT_INGESTED = "not_ingested"
 
 
 class ConsentFormStatus(str, Enum):

@@ -27,6 +27,56 @@ db = client.backlinemd
 # Default tenant for demo
 DEFAULT_TENANT = os.environ.get("DEFAULT_TENANT", "hackathon-demo")
 
+# Tool permissions for agents
+TOOL_PERMISSIONS = {
+    "intake": [
+        "find_or_create_patient",
+        "update_patient",
+        "get_patient",
+        "create_document",
+        "get_documents",
+        "update_document",
+        "create_consent_form",
+        "get_consent_forms",
+        "update_consent_form",
+        "send_consent_forms",
+        "create_task",
+        "update_task",
+        "get_tasks",
+    ],
+    "doc_extraction": [
+        "get_patient",
+        "update_patient",
+        "get_documents",
+        "update_document",
+        "create_task",
+        "update_task",
+        "get_tasks",
+    ],
+    "care_taker": [
+        "get_patient",
+        "update_patient",
+        "get_appointments",
+        "create_appointment",
+        "update_appointment",
+        "delete_appointment",
+        "get_documents",
+        "create_task",
+        "update_task",
+        "get_tasks",
+    ],
+    "insurance": [
+        "get_patient",
+        "get_insurance_claims",
+        "create_insurance_claim",
+        "update_insurance_claim",
+        "get_documents",
+        "create_task",
+        "update_task",
+        "get_tasks",
+    ],
+}
+
 
 # ==================== PATIENT TOOLS ====================
 
@@ -343,14 +393,20 @@ async def create_appointment(
     }
 
     # Use transaction
-    async with await client.start_session() as session:
-        async with session.start_transaction():
-            await db.appointments.insert_one(appointment, session=session)
-            await db.patients.update_one(
-                {"_id": patient_id},
-                {"$inc": {"appointments_count": 1}},
-                session=session,
-            )
+    if client:
+        async with client.start_session() as session:
+            async with session.start_transaction():
+                await db.appointments.insert_one(appointment, session=session)
+                await db.patients.update_one(
+                    {"_id": patient_id},
+                    {"$inc": {"appointments_count": 1}},
+                    session=session,
+                )
+    else:
+        await db.appointments.insert_one(appointment)
+        await db.patients.update_one(
+            {"_id": patient_id}, {"$inc": {"appointments_count": 1}}
+        )
 
     return {
         "appointment_id": appointment_id,
@@ -439,14 +495,20 @@ async def delete_appointment(appointment_id: str) -> Dict[str, Any]:
         return {"error": "Appointment not found"}
 
     # Use transaction
-    async with await client.start_session() as session:
-        async with session.start_transaction():
-            await db.appointments.delete_one({"_id": appointment_id}, session=session)
-            await db.patients.update_one(
-                {"_id": appointment["patient_id"]},
-                {"$inc": {"appointments_count": -1}},
-                session=session,
-            )
+    if client:
+        async with client.start_session() as session:
+            async with session.start_transaction():
+                await db.appointments.delete_one({"_id": appointment_id}, session=session)
+                await db.patients.update_one(
+                    {"_id": appointment["patient_id"]},
+                    {"$inc": {"appointments_count": -1}},
+                    session=session,
+                )
+    else:
+        await db.appointments.delete_one({"_id": appointment_id})
+        await db.patients.update_one(
+            {"_id": appointment["patient_id"]}, {"$inc": {"appointments_count": -1}}
+        )
 
     return {
         "success": True,
@@ -854,6 +916,118 @@ async def create_consent_form(
 
 
 @mcp.tool()
+async def get_patient(patient_id: str) -> Dict[str, Any]:
+    """
+    Get patient details by ID.
+
+    Args:
+        patient_id: Patient ID to fetch
+
+    Returns:
+        Dict with patient details
+    """
+    patient = await db.patients.find_one(
+        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
+    )
+
+    if not patient:
+        return {"error": "Patient not found"}
+
+    return {
+        "patient_id": patient["_id"],
+        "mrn": patient["mrn"],
+        "first_name": patient["first_name"],
+        "last_name": patient["last_name"],
+        "dob": patient.get("dob"),
+        "gender": patient.get("gender"),
+        "email": patient["contact"]["email"],
+        "phone": patient["contact"]["phone"],
+        "address": patient["contact"].get("address"),
+        "preconditions": patient.get("preconditions", []),
+        "status": patient.get("status", "Active"),
+        "tasks_count": patient.get("tasks_count", 0),
+        "appointments_count": patient.get("appointments_count", 0),
+        "flagged_count": patient.get("flagged_count", 0),
+    }
+
+
+@mcp.tool()
+async def send_consent_forms(
+    patient_id: str, form_template_ids: List[str], send_method: str = "email"
+) -> Dict[str, Any]:
+    """
+    Send consent forms to a patient via DocuSign or email.
+
+    Args:
+        patient_id: Patient ID
+        form_template_ids: List of form template IDs to send
+        send_method: How to send (email, sms, portal)
+
+    Returns:
+        Dict with consent form IDs and details
+    """
+    # Verify patient exists
+    patient = await db.patients.find_one(
+        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
+    )
+    if not patient:
+        return {"error": "Patient not found"}
+
+    # Get form templates
+    templates_cursor = db.form_templates.find(
+        {"_id": {"$in": form_template_ids}, "tenant_id": DEFAULT_TENANT}
+    )
+    templates = await templates_cursor.to_list(length=len(form_template_ids))
+
+    if not templates:
+        return {"error": "No form templates found"}
+
+    created_forms = []
+
+    for template in templates:
+        consent_form_id = str(uuid.uuid4())
+
+        consent_form = {
+            "_id": consent_form_id,
+            "tenant_id": DEFAULT_TENANT,
+            "patient_id": patient_id,
+            "patient_name": f"{patient['first_name']} {patient['last_name']}",
+            "template_id": template["_id"],
+            "form_type": template.get("name", "consent"),
+            "title": template.get("name", "Consent Form"),
+            "status": "sent",
+            "sent_via": send_method,
+            "sent_at": datetime.now(timezone.utc),
+            "signed_at": None,
+            "docusign": {
+                "envelope_id": f"env-{consent_form_id[:8]}",
+                "status": "sent",
+                "envelope_url": f"https://demo.docusign.com/envelope/{consent_form_id[:8]}",
+            },
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        await db.consent_forms.insert_one(consent_form)
+        created_forms.append(
+            {
+                "consent_form_id": consent_form_id,
+                "template_id": template["_id"],
+                "title": template.get("name"),
+                "status": "sent",
+            }
+        )
+
+    return {
+        "success": True,
+        "patient_id": patient_id,
+        "forms_sent": len(created_forms),
+        "forms": created_forms,
+        "message": f"Sent {len(created_forms)} consent form(s) via {send_method}",
+    }
+
+
+@mcp.tool()
 async def update_consent_form(
     consent_form_id: str, status: Optional[str] = None, signed_at: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -995,12 +1169,18 @@ async def create_task(
     }
 
     # Use transaction
-    async with await client.start_session() as session:
-        async with session.start_transaction():
-            await db.tasks.insert_one(task, session=session)
-            await db.patients.update_one(
-                {"_id": patient_id}, {"$inc": {"tasks_count": 1}}, session=session
-            )
+    if client:
+        async with client.start_session() as session:
+            async with session.start_transaction():
+                await db.tasks.insert_one(task, session=session)
+                await db.patients.update_one(
+                    {"_id": patient_id}, {"$inc": {"tasks_count": 1}}, session=session
+                )
+    else:
+        await db.tasks.insert_one(task)
+        await db.patients.update_one(
+            {"_id": patient_id}, {"$inc": {"tasks_count": 1}}
+        )
 
     return {
         "task_id": task_id,
@@ -1113,6 +1293,15 @@ async def get_tasks(
     ]
 
 
-# Run the server
+def main():
+    """Run the MCP server as a separate process"""
+    # FastMCP runs via stdio by default
+    # This is meant to be run as a separate server process
+    try:
+        mcp.run(transport="http", port=8002)
+    except Exception as e:
+        print(f"Error running MCP server: {e}")
+
+
 if __name__ == "__main__":
-    mcp.run()
+    main()

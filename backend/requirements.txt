@@ -18,7 +18,7 @@ distro==1.9.0
 dnspython==2.8.0
 ecdsa==0.19.1
 email-validator==2.3.0
-emergentintegrations==0.1.0
+emergentintegrations==0.1.0 --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
 fastapi==0.104.1
 fastuuid==0.14.0
 filelock==3.20.0
@@ -92,7 +92,7 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycodestyle==2.14.0
 pycparser==2.23
-pydantic==2.12.4
+pydantic[email]==2.12.4
 pydantic-settings==2.1.0
 pydantic_core==2.41.5
 pyflakes==3.4.0
@@ -101,6 +101,7 @@ PyJWT==2.10.1
 pymongo==4.5.0
 pyparsing==3.2.5
 pytest==8.4.2
+pytest-asyncio==0.25.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.0
 python-jose==3.3.0
@@ -143,3 +144,6 @@ xxhash==3.6.0
 yarl==1.22.0
 zipp==3.23.0
 zstandard==0.25.0
+autoflake
+isort
+black
