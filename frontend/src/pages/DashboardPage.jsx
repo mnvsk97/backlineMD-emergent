@@ -81,19 +81,6 @@ const DashboardPage = () => {
     summary: `Dashboard overview with ${tasks.length} pending tasks, ${patients.length} patients, and ${appointments.length} appointments today.`
   }, 'Dashboard context with all patients, tasks, and appointments');
 
-  const handleChatSubmit = () => {
-    if (!chatInput.trim()) return;
-    openChat();
-    setChatInput('');
-  };
-
-  const suggestedActions = [
-    { icon: FileText, label: 'What needs review today?', action: () => openChat() },
-    { icon: Users, label: 'Any flagged documents?', action: () => openChat() },
-    { icon: Briefcase, label: 'Pending insurance verifications', action: () => openChat() },
-    { icon: Calendar, label: "Show today's appointments", action: () => openChat() },
-  ];
-
   return (
     <div className="flex-1 h-screen overflow-hidden flex flex-col">
       <Header />
