@@ -45,7 +45,7 @@ export async function GET(req) {
       endpoint: "/api/copilotkit",
     });
 
-    const response = await handleRequest(req);
+    const response = await handleRequest(req); 
     
     const headers = new Headers(response.headers);
     Object.entries(corsHeaders).forEach(([key, value]) => {
