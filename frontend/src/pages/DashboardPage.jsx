@@ -18,7 +18,6 @@ const DashboardPage = () => {
   const [patients, setPatients] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [chatInput, setChatInput] = useState('');
 
   const fetchDashboardData = useCallback(async () => {
     try {
