@@ -932,37 +932,21 @@ async def get_dashboard_appointments():
 # ==================== COPILOT ENDPOINT ====================
 
 
-@app.post("/api/copilot")
-async def copilotkit_proxy(request: Request):
-    """Proxy CopilotKit requests to LangGraph server"""
-    import httpx
-    
-    # Get the request body
-    body = await request.body()
-    
-    # Forward the request to LangGraph server
-    langgraph_url = "http://127.0.0.1:2024"
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            # Forward POST request to LangGraph
-            response = await client.post(
-                f"{langgraph_url}/threads",
-                content=body,
-                headers={
-                    "Content-Type": "application/json",
-                    **dict(request.headers)
-                },
-                timeout=60.0
-            )
-            
-            # Return the response from LangGraph
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers)
-            )
-        except Exception as e:
-            logger.error(f"Error proxying to LangGraph: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"LangGraph proxy error: {str(e)}")
+from copilotkit.integrations.fastapi import add_fastapi_endpoint
+from copilotkit import CopilotKitSDK, LangGraphAgent
+
+# Initialize CopilotKit SDK with LangGraph agent
+sdk = CopilotKitSDK(
+    agents=[
+        LangGraphAgent(
+            name="orchestrator",
+            description="BacklineMD orchestrator agent that helps with patient management, tasks, and insurance claims",
+            agent_id="orchestrator",
+            url="http://127.0.0.1:2024",
+        )
+    ],
+)
+
+# Add CopilotKit endpoint
+add_fastapi_endpoint(app, sdk, "/api/copilot")
 
