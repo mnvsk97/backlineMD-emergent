@@ -224,6 +224,17 @@ const DashboardPage = () => {
           )}
         </div>
       </main>
+
+      {/* CopilotKit Chat */}
+      <div className="fixed bottom-6 right-6 w-96 h-[500px] shadow-2xl rounded-2xl overflow-hidden border border-gray-200 bg-white z-50">
+        <CopilotChat
+          labels={{
+            title: "AI Assistant",
+            initial: "Hi! I'm here to help you with BacklineMD. Ask me anything about patients, tasks, or appointments.",
+          }}
+          className="h-full"
+        />
+      </div>
     </div>
   );
 };
