@@ -14,6 +14,8 @@ const TreasuryPage = () => {
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskModalData, setTaskModalData] = useState({});
 
   useEffect(() => {
     fetchClaims();
