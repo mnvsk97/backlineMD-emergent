@@ -980,6 +980,38 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     }
 
 
+@app.get("/api/dashboard/appointments")
+async def get_dashboard_appointments(current_user: dict = Depends(get_current_user)):
+    """Get today's appointments for dashboard"""
+    db = get_db()
+    tenant_id = current_user["tenant_id"]
+
+    today = datetime.now(timezone.utc).date()
+    cursor = db.appointments.find(
+        {
+            "tenant_id": tenant_id,
+            "starts_at": {
+                "$gte": datetime.combine(today, datetime.min.time()),
+                "$lt": datetime.combine(today + timedelta(days=1), datetime.min.time()),
+            },
+        }
+    ).sort("starts_at", 1)
+    
+    appointments = await cursor.to_list(length=None)
+    
+    result = []
+    for apt in appointments:
+        result.append({
+            "appointment_id": apt["_id"],
+            "patient_name": apt.get("patient_name", "Unknown"),
+            "starts_at": apt["starts_at"].isoformat() if isinstance(apt["starts_at"], datetime) else apt["starts_at"],
+            "appointment_type": apt.get("appointment_type", "consultation"),
+            "provider_id": apt.get("provider_id"),
+        })
+    
+    return result
+
+
 # ==================== SSE STREAMING ROUTE ====================
 
 
