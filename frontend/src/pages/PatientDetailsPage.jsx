@@ -21,6 +21,7 @@ const PatientDetailsPage = () => {
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [showSendFormsModal, setShowSendFormsModal] = useState(false);
 
   useEffect(() => {
     fetchPatient();
