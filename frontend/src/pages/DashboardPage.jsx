@@ -55,8 +55,6 @@ const DashboardPage = () => {
   };
 
   const stats = [
-    { title: 'TIME SAVED', value: '3.3 hrs', subtitle: 'AI vs Manual', icon: Clock, color: 'blue', bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { title: 'AI COMMS', value: '4', subtitle: 'Automated', icon: MessageSquare, color: 'cyan', bgColor: 'bg-cyan-50', iconColor: 'text-cyan-600' },
     { title: 'PENDING', value: tasks.length.toString(), subtitle: 'Need Review', icon: FileCheck, color: 'orange', bgColor: 'bg-orange-50', iconColor: 'text-orange-600' },
     { title: 'APPOINTMENTS', value: appointments.length.toString(), subtitle: 'Today', icon: Calendar, color: 'purple', bgColor: 'bg-purple-50', iconColor: 'text-purple-600' }
   ];
