@@ -111,6 +111,7 @@ const TasksPage = () => {
                   key={task.task_id}
                   className="p-5 border border-gray-200 hover:border-gray-900 transition-all cursor-pointer"
                   data-testid={`task-card-${task.task_id}`}
+                  onClick={() => handleTaskClick(task)}
                 >
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
