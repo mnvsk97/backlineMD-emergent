@@ -12,6 +12,7 @@ const PatientsPage = () => {
   const { openChat } = useChat();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchPatients();
@@ -19,13 +20,17 @@ const PatientsPage = () => {
 
   const fetchPatients = async () => {
     try {
-      const response = await axios.get(`${API}/patients`);
+      const response = await apiService.getPatients();
       setPatients(response.data);
     } catch (error) {
       console.error('Error fetching patients:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePatientCreated = () => {
+    fetchPatients(); // Refresh list
   };
 
   // Provide all patients context to CopilotKit
