@@ -1,6 +1,7 @@
 {
     "dependencies": [
-        "requirements.txt"
+        "requirements.txt",
+        "."
     ],
     "graphs": {
         "orchestrator": "./orchestrator.py:agent"
