@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Mail, Phone, Calendar, Activity, FileText, Heart, Ruler, Weight, Droplet, Clock, Plus } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Calendar, Activity, FileText, Heart, Ruler, Weight, Droplet, Clock, Plus, Send, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
 import { useChat, useCopilotContext } from '../context/ChatContext';
 import { toast } from 'sonner';
 import Header from '../components/Header';
+import SendFormsModal from '../components/SendFormsModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
