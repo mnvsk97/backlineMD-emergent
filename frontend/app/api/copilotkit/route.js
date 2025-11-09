@@ -21,6 +21,21 @@ const runtime = new CopilotRuntime({
   }
 });
 
+// CORS headers
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS(req) {
+  return new Response(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
+}
+
 // 3. Build a Next.js API route that handles the CopilotKit runtime requests.
 export const POST = async (req) => {
   try {
@@ -30,14 +45,29 @@ export const POST = async (req) => {
       endpoint: "/api/copilotkit",
     });
 
-    return handleRequest(req);
+    const response = await handleRequest(req);
+    
+    // Add CORS headers to the response
+    const headers = new Headers(response.headers);
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      headers.set(key, value);
+    });
+    
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   } catch (error) {
     console.error("CopilotKit runtime error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
       { 
         status: 500,
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json",
+          ...corsHeaders
+        }
       }
     );
   }
