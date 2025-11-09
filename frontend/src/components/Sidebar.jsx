@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Activity, Users, ClipboardList } from 'lucide-react';
+import { Activity, Users, ClipboardList, Briefcase } from 'lucide-react';
 
 const Sidebar = () => {
   const navItems = [
     { path: '/', icon: Activity, label: 'Dashboard' },
     { path: '/patients', icon: Users, label: 'Patients' },
     { path: '/tasks', icon: ClipboardList, label: 'Tasks' },
+    { path: '/treasury', icon: Briefcase, label: 'Treasury' },
   ];
 
   return (
