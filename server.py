@@ -954,52 +954,54 @@ async def get_dashboard_appointments():
 
 
 
-# ==================== EMAIL ENDPOINTS ====================
+# ==================== EMAIL ENDPOINTS (Temporarily Disabled) ====================
+# Note: Composio integration endpoints disabled due to import issues
+# TODO: Fix composio_openai import and re-enable
 
-@app.post("/api/emails/send")
-async def send_email(email_data: dict):
-    """Send email via Composio Gmail integration"""
-    try:
-        result = await send_email_via_composio(
-            to_email=email_data.get("to_email"),
-            subject=email_data.get("subject"),
-            body=email_data.get("body"),
-            user_id=email_data.get("user_id", "backlinemd-system")
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Error sending email: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/api/emails/send")
+# async def send_email(email_data: dict):
+#     """Send email via Composio Gmail integration"""
+#     try:
+#         result = await send_email_via_composio(
+#             to_email=email_data.get("to_email"),
+#             subject=email_data.get("subject"),
+#             body=email_data.get("body"),
+#             user_id=email_data.get("user_id", "backlinemd-system")
+#         )
+#         return result
+#     except Exception as e:
+#         logger.error(f"Error sending email: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/patients/{patient_id}/send-notification")
-async def send_patient_notification(patient_id: str, notification_data: dict):
-    """Send notification email to patient"""
-    try:
-        # Get patient details
-        db = get_db()
-        tenant_id = DEFAULT_TENANT
-        
-        patient = await db.patients.find_one({
-            "_id": patient_id,
-            "tenant_id": tenant_id
-        })
-        
-        if not patient:
-            raise HTTPException(status_code=404, detail="Patient not found")
-        
-        # Send notification
-        result = await send_patient_notification_email(
-            patient_email=patient.get("email"),
-            patient_name=f"{patient.get('first_name', '')} {patient.get('last_name', '')}",
-            notification_type=notification_data.get("type", "general"),
-            details=notification_data.get("details", {})
-        )
-        
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error sending patient notification: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/api/patients/{patient_id}/send-notification")
+# async def send_patient_notification(patient_id: str, notification_data: dict):
+#     """Send notification email to patient"""
+#     try:
+#         # Get patient details
+#         db = get_db()
+#         tenant_id = DEFAULT_TENANT
+#         
+#         patient = await db.patients.find_one({
+#             "_id": patient_id,
+#             "tenant_id": tenant_id
+#         })
+#         
+#         if not patient:
+#             raise HTTPException(status_code=404, detail="Patient not found")
+#         
+#         # Send notification
+#         result = await send_patient_notification_email(
+#             patient_email=patient.get("email"),
+#             patient_name=f"{patient.get('first_name', '')} {patient.get('last_name', '')}",
+#             notification_type=notification_data.get("type", "general"),
+#             details=notification_data.get("details", {})
+#         )
+#         
+#         return result
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         logger.error(f"Error sending patient notification: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
