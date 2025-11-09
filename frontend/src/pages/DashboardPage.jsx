@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Send, Mic, FileCheck, Calendar, Clock, User, AlertTriangle, FileText, Users, Briefcase } from 'lucide-react';
+import { FileCheck, Calendar, Clock, User, AlertTriangle } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
