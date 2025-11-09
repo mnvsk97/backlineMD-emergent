@@ -20,6 +20,7 @@ const TreasuryPage = () => {
   const [taskModalData, setTaskModalData] = useState({});
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [selectedClaim, setSelectedClaim] = useState(null);
+  const [showCreateClaimModal, setShowCreateClaimModal] = useState(false);
 
   useEffect(() => {
     fetchClaims();
