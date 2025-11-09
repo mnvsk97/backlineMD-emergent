@@ -53,6 +53,12 @@ const PatientsPage = () => {
 
   return (
     <div className="flex-1 h-screen overflow-hidden flex flex-col">
+      <CreatePatientModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={handlePatientCreated}
+      />
+      
       <Header 
         title="Patients" 
         subtitle="Manage and view all patient information"
@@ -60,6 +66,16 @@ const PatientsPage = () => {
       
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-8 py-8">
+          {/* Create Patient Button */}
+          <div className="flex justify-end mb-6">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2 shadow-sm"
+            >
+              <Plus className="w-5 h-5" />
+              Create Patient
+            </button>
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
