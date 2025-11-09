@@ -71,21 +71,31 @@ const TasksPage = () => {
       
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-8 py-8">
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-2 mb-6 bg-white border border-gray-200 p-1 rounded-lg w-fit">
-            {filters.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className={`px-4 py-2 rounded-md transition-colors font-medium text-sm ${
-                  filter === f.value
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {f.label} ({f.count})
-              </button>
-            ))}
+          {/* Filter Tabs and Create Button */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2 bg-white border border-gray-200 p-1 rounded-lg">
+              {filters.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setFilter(f.value)}
+                  className={`px-4 py-2 rounded-md transition-colors font-medium text-sm ${
+                    filter === f.value
+                      ? 'bg-purple-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {f.label} ({f.count})
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Task
+            </button>
           </div>
 
           {loading ? (
