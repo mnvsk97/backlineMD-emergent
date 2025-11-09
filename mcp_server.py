@@ -1,6 +1,5 @@
 """
 FastMCP Server for BacklineMD AI Agents
-Provides tools for patient management, appointments, claims, documents, consent forms, and tasks
 """
 
 import os
@@ -13,72 +12,50 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# Load environment
 load_dotenv()
 
-# Initialize FastMCP server
 mcp = FastMCP("BacklineMD Agent Tools")
-
-# MongoDB connection
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 client = AsyncIOMotorClient(MONGO_URL)
 db = client.backlinemd
-
-# Default tenant for demo
 DEFAULT_TENANT = os.environ.get("DEFAULT_TENANT", "hackathon-demo")
 
-# Tool permissions for agents
 TOOL_PERMISSIONS = {
-    "intake": [
-        "find_or_create_patient",
-        "update_patient",
-        "get_patient",
-        "create_document",
-        "get_documents",
-        "update_document",
-        "create_consent_form",
-        "get_consent_forms",
-        "update_consent_form",
-        "send_consent_forms",
-        "create_task",
-        "update_task",
-        "get_tasks",
-    ],
-    "doc_extraction": [
-        "get_patient",
-        "update_patient",
-        "get_documents",
-        "update_document",
-        "create_task",
-        "update_task",
-        "get_tasks",
-    ],
-    "care_taker": [
-        "get_patient",
-        "update_patient",
-        "get_appointments",
-        "create_appointment",
-        "update_appointment",
-        "delete_appointment",
-        "get_documents",
-        "create_task",
-        "update_task",
-        "get_tasks",
-    ],
-    "insurance": [
-        "get_patient",
-        "get_insurance_claims",
-        "create_insurance_claim",
-        "update_insurance_claim",
-        "get_documents",
-        "create_task",
-        "update_task",
-        "get_tasks",
-    ],
+    "intake": ["find_or_create_patient", "update_patient", "get_patient", "create_document", "get_documents", "update_document", "create_consent_form", "get_consent_forms", "update_consent_form", "send_consent_forms", "create_task", "update_task", "get_tasks", "send_email", "send_welcome_email_to_patient"],
+    "doc_extraction": ["get_patient", "update_patient", "get_documents", "update_document", "create_task", "update_task", "get_tasks", "send_email", "send_document_confirmation_email"],
+    "care_taker": ["get_patient", "update_patient", "get_appointments", "create_appointment", "update_appointment", "delete_appointment", "get_documents", "create_task", "update_task", "get_tasks", "send_email", "call_patient_to_schedule_appointment"],
+    "insurance": ["get_patient", "get_insurance_claims", "create_insurance_claim", "update_insurance_claim", "get_documents", "create_task", "update_task", "get_tasks", "send_email"],
+    "admin": ["get_all_patients"],
 }
 
 
-# ==================== PATIENT TOOLS ====================
+# PATIENT TOOLS
+
+@mcp.tool()
+async def get_all_patients(limit: int = 50) -> List[Dict[str, Any]]:
+    """Get all patients."""
+    return await db.patients.find().limit(limit).to_list(length=limit)
+
+
+@mcp.tool()
+async def get_patient(patient_id: str) -> Dict[str, Any]:
+    """Get patient details by ID."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
+    if not patient:
+        return {"error": "Patient not found"}
+    return {
+        "patient_id": patient["_id"],
+        "mrn": patient["mrn"],
+        "first_name": patient["first_name"],
+        "last_name": patient["last_name"],
+        "dob": patient.get("dob"),
+        "gender": patient.get("gender"),
+        "email": patient["contact"]["email"],
+        "phone": patient["contact"]["phone"],
+        "address": patient["contact"].get("address"),
+        "preconditions": patient.get("preconditions", []),
+        "status": patient.get("status", "Active"),
+    }
 
 
 @mcp.tool()
@@ -91,31 +68,14 @@ async def find_or_create_patient(
     dob: Optional[str] = None,
     gender: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Find an existing patient or create a new one.
-
-    Args:
-        name: Full name (will be split into first_name and last_name if provided)
-        email: Patient email address
-        phone: Patient phone number
-        first_name: Patient first name (overrides name if provided)
-        last_name: Patient last name (overrides name if provided)
-        dob: Date of birth in YYYY-MM-DD format
-        gender: Patient gender (Male, Female, Other)
-
-    Returns:
-        Dict with patient_id and patient details
-    """
-    # Try to find existing patient
+    """Find existing patient or create new one."""
     query = {"tenant_id": DEFAULT_TENANT}
-
     if email:
         query["contact.email"] = email
     elif phone:
         query["contact.phone"] = phone
 
     existing = await db.patients.find_one(query)
-
     if existing:
         return {
             "patient_id": existing["_id"],
@@ -127,38 +87,27 @@ async def find_or_create_patient(
             "status": "existing",
         }
 
-    # Create new patient
     if name and not (first_name and last_name):
         parts = name.strip().split(" ", 1)
         first_name = parts[0]
         last_name = parts[1] if len(parts) > 1 else ""
 
     if not first_name:
-        return {"error": "first_name or name is required to create a patient"}
+        return {"error": "first_name or name required"}
 
     patient_id = str(uuid.uuid4())
-    mrn = f"MRN{random.randint(100000, 999999)}"
-
-    # Generate search n-grams
     full_name = f"{first_name} {last_name or ''}".strip()
-    ngrams = [
-        full_name.lower().replace(" ", "")[i : i + 3]
-        for i in range(len(full_name.replace(" ", "")) - 2)
-    ]
+    ngrams = [full_name.lower().replace(" ", "")[i : i + 3] for i in range(len(full_name.replace(" ", "")) - 2)]
 
     patient = {
         "_id": patient_id,
         "tenant_id": DEFAULT_TENANT,
-        "mrn": mrn,
+        "mrn": f"MRN{random.randint(100000, 999999)}",
         "first_name": first_name,
         "last_name": last_name or "",
         "dob": dob or "1990-01-01",
         "gender": gender or "Unknown",
-        "contact": {
-            "email": email or f"{first_name.lower()}@example.com",
-            "phone": phone or "555-0000",
-            "address": {},
-        },
+        "contact": {"email": email or f"{first_name.lower()}@example.com", "phone": phone or "555-0000", "address": {}},
         "preconditions": [],
         "flags": [],
         "latest_vitals": {},
@@ -174,14 +123,13 @@ async def find_or_create_patient(
     }
 
     await db.patients.insert_one(patient)
-
     return {
         "patient_id": patient_id,
         "first_name": first_name,
         "last_name": last_name or "",
         "email": patient["contact"]["email"],
         "phone": patient["contact"]["phone"],
-        "mrn": mrn,
+        "mrn": patient["mrn"],
         "status": "created",
     }
 
@@ -199,26 +147,8 @@ async def update_patient(
     preconditions: Optional[List[str]] = None,
     status: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Update patient information.
-
-    Args:
-        patient_id: Patient ID to update
-        first_name: New first name
-        last_name: New last name
-        email: New email
-        phone: New phone number
-        dob: New date of birth
-        gender: New gender
-        address: New address dict
-        preconditions: List of medical preconditions
-        status: Patient status (Active, Inactive, etc.)
-
-    Returns:
-        Dict with success status and updated patient info
-    """
+    """Update patient information."""
     update_fields = {}
-
     if first_name:
         update_fields["first_name"] = first_name
     if last_name:
@@ -237,34 +167,15 @@ async def update_patient(
         update_fields["preconditions"] = preconditions
     if status:
         update_fields["status"] = status
-
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    result = await db.patients.update_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields}
-    )
-
+    result = await db.patients.update_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields})
     if result.matched_count == 0:
         return {"error": "Patient not found"}
-
-    patient = await db.patients.find_one({"_id": patient_id})
-
-    return {
-        "success": True,
-        "patient_id": patient_id,
-        "updated_fields": list(update_fields.keys()),
-        "patient": {
-            "first_name": patient["first_name"],
-            "last_name": patient["last_name"],
-            "email": patient["contact"]["email"],
-            "phone": patient["contact"]["phone"],
-            "status": patient.get("status", "Active"),
-        },
-    }
+    return {"success": True, "patient_id": patient_id}
 
 
-# ==================== APPOINTMENT TOOLS ====================
-
+# APPOINTMENT TOOLS
 
 @mcp.tool()
 async def get_appointments(
@@ -273,26 +184,12 @@ async def get_appointments(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    """
-    Get appointments for a patient or date range.
-
-    Args:
-        patient_id: Filter by patient ID
-        date: Filter by date (YYYY-MM-DD) or 'today'
-        status: Filter by status (scheduled, completed, cancelled)
-        limit: Maximum number of results
-
-    Returns:
-        List of appointment dicts
-    """
+    """Get appointments."""
     query = {"tenant_id": DEFAULT_TENANT}
-
     if patient_id:
         query["patient_id"] = patient_id
-
     if status:
         query["status"] = status
-
     if date == "today":
         today = datetime.now(timezone.utc).date()
         query["starts_at"] = {
@@ -306,37 +203,24 @@ async def get_appointments(
             "$lt": datetime.combine(date_obj + timedelta(days=1), datetime.min.time()),
         }
 
-    cursor = db.appointments.find(query).sort("starts_at", 1).limit(limit)
-    appointments = await cursor.to_list(length=limit)
-
-    # Batch fetch patients
+    appointments = await db.appointments.find(query).sort("starts_at", 1).limit(limit).to_list(length=limit)
     patient_ids = list(set(apt["patient_id"] for apt in appointments))
-    patients_cursor = db.patients.find({"_id": {"$in": patient_ids}})
-    patients_list = await patients_cursor.to_list(length=len(patient_ids))
-    patients_map = {p["_id"]: p for p in patients_list}
+    patients = {p["_id"]: p for p in await db.patients.find({"_id": {"$in": patient_ids}}).to_list(length=len(patient_ids))}
 
-    result = []
-    for apt in appointments:
-        patient = patients_map.get(apt["patient_id"])
-        result.append(
-            {
-                "appointment_id": apt["_id"],
-                "patient_id": apt["patient_id"],
-                "patient_name": (
-                    f"{patient['first_name']} {patient['last_name']}"
-                    if patient
-                    else "Unknown"
-                ),
-                "type": apt["type"],
-                "starts_at": apt["starts_at"].isoformat(),
-                "ends_at": apt["ends_at"].isoformat(),
-                "status": apt["status"],
-                "location": apt.get("location"),
-                "title": apt.get("title"),
-            }
-        )
-
-    return result
+    return [
+        {
+            "appointment_id": apt["_id"],
+            "patient_id": apt["patient_id"],
+            "patient_name": f"{patients[apt['patient_id']]['first_name']} {patients[apt['patient_id']]['last_name']}" if apt["patient_id"] in patients else "Unknown",
+            "type": apt["type"],
+            "starts_at": apt["starts_at"].isoformat(),
+            "ends_at": apt["ends_at"].isoformat(),
+            "status": apt["status"],
+            "location": apt.get("location"),
+            "title": apt.get("title"),
+        }
+        for apt in appointments
+    ]
 
 
 @mcp.tool()
@@ -349,30 +233,12 @@ async def create_appointment(
     location: Optional[str] = None,
     provider_id: Optional[str] = "default-provider",
 ) -> Dict[str, Any]:
-    """
-    Create a new appointment.
-
-    Args:
-        patient_id: Patient ID
-        type: Appointment type (checkup, consultation, follow-up, etc.)
-        starts_at: Start time in ISO format (YYYY-MM-DDTHH:MM:SS)
-        ends_at: End time in ISO format
-        title: Appointment title
-        location: Appointment location
-        provider_id: Provider/doctor ID
-
-    Returns:
-        Dict with appointment_id and details
-    """
-    # Verify patient exists
-    patient = await db.patients.find_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
-    )
+    """Create a new appointment."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
     if not patient:
         return {"error": "Patient not found"}
 
     appointment_id = str(uuid.uuid4())
-
     appointment = {
         "_id": appointment_id,
         "tenant_id": DEFAULT_TENANT,
@@ -384,39 +250,14 @@ async def create_appointment(
         "ends_at": datetime.fromisoformat(ends_at.replace("Z", "+00:00")),
         "location": location or "Main Office",
         "status": "scheduled",
-        "google_calendar": {
-            "event_id": f"mock-event-{appointment_id[:8]}",
-            "calendar_id": "primary",
-        },
+        "google_calendar": {"event_id": f"mock-event-{appointment_id[:8]}", "calendar_id": "primary"},
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
 
-    # Use transaction
-    if client:
-        async with client.start_session() as session:
-            async with session.start_transaction():
-                await db.appointments.insert_one(appointment, session=session)
-                await db.patients.update_one(
-                    {"_id": patient_id},
-                    {"$inc": {"appointments_count": 1}},
-                    session=session,
-                )
-    else:
-        await db.appointments.insert_one(appointment)
-        await db.patients.update_one(
-            {"_id": patient_id}, {"$inc": {"appointments_count": 1}}
-        )
-
-    return {
-        "appointment_id": appointment_id,
-        "patient_id": patient_id,
-        "type": type,
-        "starts_at": starts_at,
-        "ends_at": ends_at,
-        "status": "scheduled",
-        "message": "Appointment created successfully",
-    }
+    await db.appointments.insert_one(appointment)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"appointments_count": 1}})
+    return {"appointment_id": appointment_id, "patient_id": patient_id, "status": "scheduled"}
 
 
 @mcp.tool()
@@ -428,97 +269,39 @@ async def update_appointment(
     location: Optional[str] = None,
     title: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Update an existing appointment.
-
-    Args:
-        appointment_id: Appointment ID to update
-        status: New status (scheduled, completed, cancelled, no-show)
-        starts_at: New start time in ISO format
-        ends_at: New end time in ISO format
-        location: New location
-        title: New title
-
-    Returns:
-        Dict with success status
-    """
+    """Update an appointment."""
     update_fields = {}
-
     if status:
         update_fields["status"] = status
     if starts_at:
-        update_fields["starts_at"] = datetime.fromisoformat(
-            starts_at.replace("Z", "+00:00")
-        )
+        update_fields["starts_at"] = datetime.fromisoformat(starts_at.replace("Z", "+00:00"))
     if ends_at:
-        update_fields["ends_at"] = datetime.fromisoformat(
-            ends_at.replace("Z", "+00:00")
-        )
+        update_fields["ends_at"] = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
     if location:
         update_fields["location"] = location
     if title:
         update_fields["title"] = title
-
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    result = await db.appointments.update_one(
-        {"_id": appointment_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields}
-    )
-
+    result = await db.appointments.update_one({"_id": appointment_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields})
     if result.matched_count == 0:
         return {"error": "Appointment not found"}
-
-    return {
-        "success": True,
-        "appointment_id": appointment_id,
-        "updated_fields": list(update_fields.keys()),
-    }
+    return {"success": True, "appointment_id": appointment_id}
 
 
 @mcp.tool()
 async def delete_appointment(appointment_id: str) -> Dict[str, Any]:
-    """
-    Delete/cancel an appointment.
-
-    Args:
-        appointment_id: Appointment ID to delete
-
-    Returns:
-        Dict with success status
-    """
-    # Get appointment to find patient
-    appointment = await db.appointments.find_one(
-        {"_id": appointment_id, "tenant_id": DEFAULT_TENANT}
-    )
-
+    """Delete an appointment."""
+    appointment = await db.appointments.find_one({"_id": appointment_id, "tenant_id": DEFAULT_TENANT})
     if not appointment:
         return {"error": "Appointment not found"}
 
-    # Use transaction
-    if client:
-        async with client.start_session() as session:
-            async with session.start_transaction():
-                await db.appointments.delete_one({"_id": appointment_id}, session=session)
-                await db.patients.update_one(
-                    {"_id": appointment["patient_id"]},
-                    {"$inc": {"appointments_count": -1}},
-                    session=session,
-                )
-    else:
-        await db.appointments.delete_one({"_id": appointment_id})
-        await db.patients.update_one(
-            {"_id": appointment["patient_id"]}, {"$inc": {"appointments_count": -1}}
-        )
-
-    return {
-        "success": True,
-        "appointment_id": appointment_id,
-        "message": "Appointment deleted",
-    }
+    await db.appointments.delete_one({"_id": appointment_id})
+    await db.patients.update_one({"_id": appointment["patient_id"]}, {"$inc": {"appointments_count": -1}})
+    return {"success": True, "appointment_id": appointment_id}
 
 
-# ==================== INSURANCE CLAIM TOOLS ====================
-
+# INSURANCE CLAIM TOOLS
 
 @mcp.tool()
 async def get_insurance_claims(
@@ -526,27 +309,14 @@ async def get_insurance_claims(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    """
-    Get insurance claims.
-
-    Args:
-        patient_id: Filter by patient ID
-        status: Filter by status (pending, submitted, approved, denied)
-        limit: Maximum number of results
-
-    Returns:
-        List of claim dicts
-    """
+    """Get insurance claims."""
     query = {"tenant_id": DEFAULT_TENANT}
-
     if patient_id:
         query["patient_id"] = patient_id
     if status:
         query["status"] = status
 
-    cursor = db.claims.find(query).sort("last_event_at", -1).limit(limit)
-    claims = await cursor.to_list(length=limit)
-
+    claims = await db.claims.find(query).sort("last_event_at", -1).limit(limit).to_list(length=limit)
     return [
         {
             "claim_id": claim["_id"],
@@ -575,39 +345,20 @@ async def create_insurance_claim(
     service_date: str,
     description: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Create a new insurance claim.
-
-    Args:
-        patient_id: Patient ID
-        amount: Claim amount in dollars
-        insurance_provider: Insurance provider name
-        procedure_code: CPT/procedure code
-        diagnosis_code: ICD diagnosis code
-        service_date: Service date (YYYY-MM-DD)
-        description: Claim description
-
-    Returns:
-        Dict with claim_id and details
-    """
-    # Verify patient exists
-    patient = await db.patients.find_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
-    )
+    """Create a new insurance claim."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
     if not patient:
         return {"error": "Patient not found"}
 
     claim_id = str(uuid.uuid4())
-    claim_id_display = f"C{random.randint(10000, 99999)}"
-
     claim = {
         "_id": claim_id,
-        "claim_id": claim_id_display,
+        "claim_id": f"C{random.randint(10000, 99999)}",
         "tenant_id": DEFAULT_TENANT,
         "patient_id": patient_id,
         "patient_name": f"{patient['first_name']} {patient['last_name']}",
         "insurance_provider": insurance_provider,
-        "amount": int(amount * 100),  # Store in cents
+        "amount": int(amount * 100),
         "amount_display": amount,
         "procedure_code": procedure_code,
         "diagnosis_code": diagnosis_code,
@@ -621,8 +372,6 @@ async def create_insurance_claim(
     }
 
     await db.claims.insert_one(claim)
-
-    # Create initial event
     event = {
         "_id": str(uuid.uuid4()),
         "tenant_id": DEFAULT_TENANT,
@@ -633,17 +382,8 @@ async def create_insurance_claim(
         "time": datetime.now(timezone.utc).strftime("%I:%M %p"),
         "created_at": datetime.now(timezone.utc),
     }
-
     await db.claim_events.insert_one(event)
-
-    return {
-        "claim_id": claim_id,
-        "claim_id_display": claim_id_display,
-        "patient_id": patient_id,
-        "amount": amount,
-        "status": "pending",
-        "message": "Claim created successfully",
-    }
+    return {"claim_id": claim_id, "patient_id": patient_id, "status": "pending"}
 
 
 @mcp.tool()
@@ -653,37 +393,20 @@ async def update_insurance_claim(
     status: Optional[str] = None,
     reason: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Update an insurance claim.
-
-    Args:
-        claim_id: Claim ID to update
-        amount: New claim amount
-        status: New status (pending, submitted, approved, denied)
-        reason: Reason for update (will create event)
-
-    Returns:
-        Dict with success status
-    """
+    """Update an insurance claim."""
     update_fields = {}
-
     if amount is not None:
         update_fields["amount"] = int(amount * 100)
         update_fields["amount_display"] = amount
     if status:
         update_fields["status"] = status
         update_fields["last_event_at"] = datetime.now(timezone.utc)
-
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    result = await db.claims.update_one(
-        {"_id": claim_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields}
-    )
-
+    result = await db.claims.update_one({"_id": claim_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields})
     if result.matched_count == 0:
         return {"error": "Claim not found"}
 
-    # Create event if status changed
     if status:
         event = {
             "_id": str(uuid.uuid4()),
@@ -696,16 +419,10 @@ async def update_insurance_claim(
             "created_at": datetime.now(timezone.utc),
         }
         await db.claim_events.insert_one(event)
-
-    return {
-        "success": True,
-        "claim_id": claim_id,
-        "updated_fields": list(update_fields.keys()),
-    }
+    return {"success": True, "claim_id": claim_id}
 
 
-# ==================== DOCUMENT TOOLS ====================
-
+# DOCUMENT TOOLS
 
 @mcp.tool()
 async def create_document(
@@ -716,41 +433,18 @@ async def create_document(
     file_url: Optional[str] = None,
     extracted_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Create a document record for a patient.
-
-    Args:
-        patient_id: Patient ID
-        kind: Document kind (lab, imaging, medical_history, summary, consent_form)
-        filename: Original filename
-        mime_type: MIME type (application/pdf, image/png, etc.)
-        file_url: URL to the file (optional, can be generated)
-        extracted_data: Pre-extracted data from the document
-
-    Returns:
-        Dict with document_id and details
-    """
-    # Verify patient exists
-    patient = await db.patients.find_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
-    )
+    """Create a document record."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
     if not patient:
         return {"error": "Patient not found"}
 
     document_id = str(uuid.uuid4())
-
     document = {
         "_id": document_id,
         "tenant_id": DEFAULT_TENANT,
         "patient_id": patient_id,
         "kind": kind,
-        "file": {
-            "url": file_url or f"/uploads/{document_id}/{filename}",
-            "name": filename,
-            "mime": mime_type,
-            "size": 0,
-            "sha256": f"mock-hash-{document_id[:8]}",
-        },
+        "file": {"url": file_url or f"/uploads/{document_id}/{filename}", "name": filename, "mime": mime_type, "size": 0, "sha256": f"mock-hash-{document_id[:8]}"},
         "ocr": {"done": False, "engine": None},
         "extracted": extracted_data or {},
         "status": "uploaded" if not extracted_data else "ingested",
@@ -759,14 +453,7 @@ async def create_document(
     }
 
     await db.documents.insert_one(document)
-
-    return {
-        "document_id": document_id,
-        "patient_id": patient_id,
-        "kind": kind,
-        "status": document["status"],
-        "message": "Document created successfully",
-    }
+    return {"document_id": document_id, "patient_id": patient_id, "kind": kind, "status": document["status"]}
 
 
 @mcp.tool()
@@ -775,38 +462,18 @@ async def update_document(
     status: Optional[str] = None,
     extracted_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Update a document's status or extracted data.
-
-    Args:
-        document_id: Document ID to update
-        status: New status (uploaded, ingesting, ingested, not_ingested, approved, rejected)
-        extracted_data: Extracted data to add/update
-
-    Returns:
-        Dict with success status
-    """
+    """Update a document."""
     update_fields = {}
-
     if status:
         update_fields["status"] = status
     if extracted_data:
         update_fields["extracted"] = extracted_data
-
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    result = await db.documents.update_one(
-        {"_id": document_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields}
-    )
-
+    result = await db.documents.update_one({"_id": document_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields})
     if result.matched_count == 0:
         return {"error": "Document not found"}
-
-    return {
-        "success": True,
-        "document_id": document_id,
-        "updated_fields": list(update_fields.keys()),
-    }
+    return {"success": True, "document_id": document_id}
 
 
 @mcp.tool()
@@ -816,20 +483,8 @@ async def get_documents(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    """
-    Get documents filtered by patient, kind, or status.
-
-    Args:
-        patient_id: Filter by patient ID
-        kind: Filter by document kind
-        status: Filter by status
-        limit: Maximum number of results
-
-    Returns:
-        List of document dicts
-    """
+    """Get documents."""
     query = {"tenant_id": DEFAULT_TENANT}
-
     if patient_id:
         query["patient_id"] = patient_id
     if kind:
@@ -837,9 +492,7 @@ async def get_documents(
     if status:
         query["status"] = status
 
-    cursor = db.documents.find(query).sort("created_at", -1).limit(limit)
-    documents = await cursor.to_list(length=limit)
-
+    documents = await db.documents.find(query).sort("created_at", -1).limit(limit).to_list(length=limit)
     return [
         {
             "document_id": doc["_id"],
@@ -855,8 +508,7 @@ async def get_documents(
     ]
 
 
-# ==================== CONSENT FORM TOOLS ====================
-
+# CONSENT FORM TOOLS
 
 @mcp.tool()
 async def create_consent_form(
@@ -866,28 +518,12 @@ async def create_consent_form(
     title: str,
     send_method: Optional[str] = "email",
 ) -> Dict[str, Any]:
-    """
-    Create and optionally send a consent form to a patient.
-
-    Args:
-        patient_id: Patient ID
-        template_id: Form template ID
-        form_type: Type of consent form
-        title: Form title
-        send_method: How to send (email, sms, portal)
-
-    Returns:
-        Dict with consent_form_id and details
-    """
-    # Verify patient exists
-    patient = await db.patients.find_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
-    )
+    """Create a consent form."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
     if not patient:
         return {"error": "Patient not found"}
 
     consent_form_id = str(uuid.uuid4())
-
     consent_form = {
         "_id": consent_form_id,
         "tenant_id": DEFAULT_TENANT,
@@ -905,88 +541,23 @@ async def create_consent_form(
     }
 
     await db.consent_forms.insert_one(consent_form)
-
-    return {
-        "consent_form_id": consent_form_id,
-        "patient_id": patient_id,
-        "form_type": form_type,
-        "status": consent_form["status"],
-        "message": f"Consent form created and {'sent' if send_method else 'saved'}",
-    }
+    return {"consent_form_id": consent_form_id, "patient_id": patient_id, "status": consent_form["status"]}
 
 
 @mcp.tool()
-async def get_patient(patient_id: str) -> Dict[str, Any]:
-    """
-    Get patient details by ID.
-
-    Args:
-        patient_id: Patient ID to fetch
-
-    Returns:
-        Dict with patient details
-    """
-    patient = await db.patients.find_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
-    )
-
+async def send_consent_forms(patient_id: str, form_template_ids: List[str], send_method: str = "email") -> Dict[str, Any]:
+    """Send consent forms to a patient."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
     if not patient:
         return {"error": "Patient not found"}
 
-    return {
-        "patient_id": patient["_id"],
-        "mrn": patient["mrn"],
-        "first_name": patient["first_name"],
-        "last_name": patient["last_name"],
-        "dob": patient.get("dob"),
-        "gender": patient.get("gender"),
-        "email": patient["contact"]["email"],
-        "phone": patient["contact"]["phone"],
-        "address": patient["contact"].get("address"),
-        "preconditions": patient.get("preconditions", []),
-        "status": patient.get("status", "Active"),
-        "tasks_count": patient.get("tasks_count", 0),
-        "appointments_count": patient.get("appointments_count", 0),
-        "flagged_count": patient.get("flagged_count", 0),
-    }
-
-
-@mcp.tool()
-async def send_consent_forms(
-    patient_id: str, form_template_ids: List[str], send_method: str = "email"
-) -> Dict[str, Any]:
-    """
-    Send consent forms to a patient via DocuSign or email.
-
-    Args:
-        patient_id: Patient ID
-        form_template_ids: List of form template IDs to send
-        send_method: How to send (email, sms, portal)
-
-    Returns:
-        Dict with consent form IDs and details
-    """
-    # Verify patient exists
-    patient = await db.patients.find_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
-    )
-    if not patient:
-        return {"error": "Patient not found"}
-
-    # Get form templates
-    templates_cursor = db.form_templates.find(
-        {"_id": {"$in": form_template_ids}, "tenant_id": DEFAULT_TENANT}
-    )
-    templates = await templates_cursor.to_list(length=len(form_template_ids))
-
+    templates = await db.form_templates.find({"_id": {"$in": form_template_ids}, "tenant_id": DEFAULT_TENANT}).to_list(length=len(form_template_ids))
     if not templates:
         return {"error": "No form templates found"}
 
     created_forms = []
-
     for template in templates:
         consent_form_id = str(uuid.uuid4())
-
         consent_form = {
             "_id": consent_form_id,
             "tenant_id": DEFAULT_TENANT,
@@ -999,99 +570,42 @@ async def send_consent_forms(
             "sent_via": send_method,
             "sent_at": datetime.now(timezone.utc),
             "signed_at": None,
-            "docusign": {
-                "envelope_id": f"env-{consent_form_id[:8]}",
-                "status": "sent",
-                "envelope_url": f"https://demo.docusign.com/envelope/{consent_form_id[:8]}",
-            },
+            "docusign": {"envelope_id": f"env-{consent_form_id[:8]}", "status": "sent", "envelope_url": f"https://demo.docusign.com/envelope/{consent_form_id[:8]}"},
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
         }
-
         await db.consent_forms.insert_one(consent_form)
-        created_forms.append(
-            {
-                "consent_form_id": consent_form_id,
-                "template_id": template["_id"],
-                "title": template.get("name"),
-                "status": "sent",
-            }
-        )
+        created_forms.append({"consent_form_id": consent_form_id, "template_id": template["_id"], "title": template.get("name"), "status": "sent"})
 
-    return {
-        "success": True,
-        "patient_id": patient_id,
-        "forms_sent": len(created_forms),
-        "forms": created_forms,
-        "message": f"Sent {len(created_forms)} consent form(s) via {send_method}",
-    }
+    return {"success": True, "patient_id": patient_id, "forms_sent": len(created_forms), "forms": created_forms}
 
 
 @mcp.tool()
-async def update_consent_form(
-    consent_form_id: str, status: Optional[str] = None, signed_at: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update consent form status.
-
-    Args:
-        consent_form_id: Consent form ID to update
-        status: New status (to_do, sent, in_progress, signed)
-        signed_at: Signature timestamp in ISO format
-
-    Returns:
-        Dict with success status
-    """
+async def update_consent_form(consent_form_id: str, status: Optional[str] = None, signed_at: Optional[str] = None) -> Dict[str, Any]:
+    """Update consent form status."""
     update_fields = {}
-
     if status:
         update_fields["status"] = status
     if signed_at:
-        update_fields["signed_at"] = datetime.fromisoformat(
-            signed_at.replace("Z", "+00:00")
-        )
-
+        update_fields["signed_at"] = datetime.fromisoformat(signed_at.replace("Z", "+00:00"))
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    result = await db.consent_forms.update_one(
-        {"_id": consent_form_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields}
-    )
-
+    result = await db.consent_forms.update_one({"_id": consent_form_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields})
     if result.matched_count == 0:
         return {"error": "Consent form not found"}
-
-    return {
-        "success": True,
-        "consent_form_id": consent_form_id,
-        "updated_fields": list(update_fields.keys()),
-    }
+    return {"success": True, "consent_form_id": consent_form_id}
 
 
 @mcp.tool()
-async def get_consent_forms(
-    patient_id: Optional[str] = None, status: Optional[str] = None, limit: int = 50
-) -> List[Dict[str, Any]]:
-    """
-    Get consent forms filtered by patient or status.
-
-    Args:
-        patient_id: Filter by patient ID
-        status: Filter by status
-        limit: Maximum number of results
-
-    Returns:
-        List of consent form dicts
-    """
+async def get_consent_forms(patient_id: Optional[str] = None, status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """Get consent forms."""
     query = {"tenant_id": DEFAULT_TENANT}
-
     if patient_id:
         query["patient_id"] = patient_id
     if status:
         query["status"] = status
 
-    cursor = db.consent_forms.find(query).sort("created_at", -1).limit(limit)
-    forms = await cursor.to_list(length=limit)
-
+    forms = await db.consent_forms.find(query).sort("created_at", -1).limit(limit).to_list(length=limit)
     return [
         {
             "consent_form_id": form["_id"],
@@ -1101,16 +615,13 @@ async def get_consent_forms(
             "title": form["title"],
             "status": form["status"],
             "sent_at": form["sent_at"].isoformat() if form.get("sent_at") else None,
-            "signed_at": (
-                form["signed_at"].isoformat() if form.get("signed_at") else None
-            ),
+            "signed_at": form["signed_at"].isoformat() if form.get("signed_at") else None,
         }
         for form in forms
     ]
 
 
-# ==================== TASK TOOLS ====================
-
+# TASK TOOLS
 
 @mcp.tool()
 async def create_task(
@@ -1122,34 +633,15 @@ async def create_task(
     assigned_to: str = "Dr. James O'Brien",
     agent_type: str = "ai_agent",
 ) -> Dict[str, Any]:
-    """
-    Create a new task.
-
-    Args:
-        patient_id: Patient ID
-        title: Task title
-        description: Task description
-        priority: Priority (urgent, high, medium, low)
-        kind: Task kind (general, document_review, insurance_verification, etc.)
-        assigned_to: Who the task is assigned to
-        agent_type: Type of agent creating the task
-
-    Returns:
-        Dict with task_id and details
-    """
-    # Verify patient exists
-    patient = await db.patients.find_one(
-        {"_id": patient_id, "tenant_id": DEFAULT_TENANT}
-    )
+    """Create a new task."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
     if not patient:
         return {"error": "Patient not found"}
 
     task_id = str(uuid.uuid4())
-    task_id_display = f"T{random.randint(10000, 99999)}"
-
     task = {
         "_id": task_id,
-        "task_id": task_id_display,
+        "task_id": f"T{random.randint(10000, 99999)}",
         "tenant_id": DEFAULT_TENANT,
         "source": "agent",
         "kind": kind,
@@ -1168,102 +660,33 @@ async def create_task(
         "created_by": "ai_agent",
     }
 
-    # Use transaction
-    if client:
-        async with client.start_session() as session:
-            async with session.start_transaction():
-                await db.tasks.insert_one(task, session=session)
-                await db.patients.update_one(
-                    {"_id": patient_id}, {"$inc": {"tasks_count": 1}}, session=session
-                )
-    else:
-        await db.tasks.insert_one(task)
-        await db.patients.update_one(
-            {"_id": patient_id}, {"$inc": {"tasks_count": 1}}
-        )
-
-    return {
-        "task_id": task_id,
-        "task_id_display": task_id_display,
-        "patient_id": patient_id,
-        "title": title,
-        "priority": priority,
-        "state": "open",
-        "message": "Task created successfully",
-    }
+    await db.tasks.insert_one(task)
+    await db.patients.update_one({"_id": patient_id}, {"$inc": {"tasks_count": 1}})
+    return {"task_id": task_id, "patient_id": patient_id, "title": title, "priority": priority, "state": "open"}
 
 
 @mcp.tool()
-async def update_task(
-    task_id: str,
-    state: Optional[str] = None,
-    priority: Optional[str] = None,
-    comment: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Update a task's state, priority, or add a comment.
-
-    Args:
-        task_id: Task ID to update
-        state: New state (open, in_progress, done, cancelled)
-        priority: New priority (urgent, high, medium, low)
-        comment: Comment to add to the task
-
-    Returns:
-        Dict with success status
-    """
+async def update_task(task_id: str, state: Optional[str] = None, priority: Optional[str] = None, comment: Optional[str] = None) -> Dict[str, Any]:
+    """Update a task."""
     update_fields = {}
-
     if state:
         update_fields["state"] = state
     if priority:
         update_fields["priority"] = priority
     if comment:
-        update_fields["$push"] = {
-            "comments": {
-                "user_id": "ai_agent",
-                "text": comment,
-                "created_at": datetime.now(timezone.utc),
-            }
-        }
-
+        update_fields["$push"] = {"comments": {"user_id": "ai_agent", "text": comment, "created_at": datetime.now(timezone.utc)}}
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    result = await db.tasks.update_one(
-        {"_id": task_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields}
-    )
-
+    result = await db.tasks.update_one({"_id": task_id, "tenant_id": DEFAULT_TENANT}, {"$set": update_fields})
     if result.matched_count == 0:
         return {"error": "Task not found"}
-
-    return {
-        "success": True,
-        "task_id": task_id,
-        "updated_fields": list(update_fields.keys()),
-    }
+    return {"success": True, "task_id": task_id}
 
 
 @mcp.tool()
-async def get_tasks(
-    patient_id: Optional[str] = None,
-    state: Optional[str] = None,
-    priority: Optional[str] = None,
-    limit: int = 50,
-) -> List[Dict[str, Any]]:
-    """
-    Get tasks filtered by patient, state, or priority.
-
-    Args:
-        patient_id: Filter by patient ID
-        state: Filter by state (open, in_progress, done, cancelled)
-        priority: Filter by priority (urgent, high, medium, low)
-        limit: Maximum number of results
-
-    Returns:
-        List of task dicts
-    """
+async def get_tasks(patient_id: Optional[str] = None, state: Optional[str] = None, priority: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """Get tasks."""
     query = {"tenant_id": DEFAULT_TENANT}
-
     if patient_id:
         query["patient_id"] = patient_id
     if state:
@@ -1271,9 +694,7 @@ async def get_tasks(
     if priority:
         query["priority"] = priority
 
-    cursor = db.tasks.find(query).sort("created_at", -1).limit(limit)
-    tasks = await cursor.to_list(length=limit)
-
+    tasks = await db.tasks.find(query).sort("created_at", -1).limit(limit).to_list(length=limit)
     return [
         {
             "task_id": task["_id"],
@@ -1293,14 +714,82 @@ async def get_tasks(
     ]
 
 
+# EMAIL TOOLS
+
+@mcp.tool()
+async def send_email(patient_id: str, subject: str, body: str, html_body: Optional[str] = None) -> Dict[str, Any]:
+    """Send an email to a patient via Gmail using Composio."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
+    if not patient:
+        return {"error": "Patient not found"}
+    if not patient["contact"]["email"]:
+        return {"error": "Patient email not found"}
+
+    from composio_email_service import get_email_service
+
+    service = await get_email_service()
+    result = await service.send_email(to_email=patient["contact"]["email"], subject=subject, body=body, html_body=html_body)
+    return {"success": result.get("success", False), "patient_id": patient_id, "message_id": result.get("message_id"), "error": result.get("error")}
+
+
+@mcp.tool()
+async def send_welcome_email_to_patient(patient_id: str) -> Dict[str, Any]:
+    """Send a welcome email to a new patient."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
+    if not patient:
+        return {"error": "Patient not found"}
+    if not patient["contact"]["email"]:
+        return {"error": "Patient email not found"}
+
+    from composio_email_service import send_welcome_email
+
+    result = await send_welcome_email(patient_email=patient["contact"]["email"], patient_name=f"{patient['first_name']} {patient['last_name']}")
+    return {"success": result.get("success", False), "patient_id": patient_id, "error": result.get("error")}
+
+
+@mcp.tool()
+async def send_document_confirmation_email(patient_id: str) -> Dict[str, Any]:
+    """Send a confirmation email when documents are received."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
+    if not patient:
+        return {"error": "Patient not found"}
+    if not patient["contact"]["email"]:
+        return {"error": "Patient email not found"}
+
+    from composio_email_service import send_document_received_email
+
+    result = await send_document_received_email(patient_email=patient["contact"]["email"], patient_name=f"{patient['first_name']} {patient['last_name']}")
+    return {"success": result.get("success", False), "patient_id": patient_id, "error": result.get("error")}
+
+
+# PHONE TOOLS
+
+@mcp.tool()
+async def call_patient_to_schedule_appointment(patient_id: str, context: Optional[str] = None) -> Dict[str, Any]:
+    """Call a patient to schedule an appointment using Vapi AI."""
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": DEFAULT_TENANT})
+    if not patient:
+        return {"error": "Patient not found"}
+    if not patient["contact"]["phone"]:
+        return {"error": "Patient phone number not found"}
+
+    patient_phone = patient["contact"]["phone"]
+    if not patient_phone.startswith("+"):
+        patient_phone = patient_phone.replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+        if len(patient_phone) == 10:
+            patient_phone = f"+1{patient_phone}"
+        else:
+            patient_phone = f"+{patient_phone}"
+
+    from vapi_phone_service import call_patient_for_appointment
+
+    result = await call_patient_for_appointment(patient_phone=patient_phone, patient_name=f"{patient['first_name']} {patient['last_name']}", patient_id=patient_id, context=context)
+    return {"success": result.get("success", False), "patient_id": patient_id, "call_id": result.get("call_id"), "error": result.get("error")}
+
+
 def main():
-    """Run the MCP server as a separate process"""
-    # FastMCP runs via stdio by default
-    # This is meant to be run as a separate server process
-    try:
-        mcp.run(transport="http", port=8002)
-    except Exception as e:
-        print(f"Error running MCP server: {e}")
+    """Run the MCP server."""
+    mcp.run(transport="sse", port=8002)
 
 
 if __name__ == "__main__":

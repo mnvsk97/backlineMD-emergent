@@ -17,8 +17,8 @@ import aiofiles
 async def get_tools() -> List[Tool]:
     client = MultiServerMCPClient({
             "backlinemd": {
-                "url": "http://localhost:8002/mcp",
-                "transport": "streamable_http",
+                "url": "http://localhost:8002/sse",
+                "transport": "sse",
             }
         },
     )
@@ -30,7 +30,7 @@ load_dotenv()
 
 
 # LLM Configuration
-model = ChatOpenAI(model="gpt-4o", temperature=0.3)
+model = ChatOpenAI(model="gpt-4.1", temperature=0.3)
 
 
 async def load_prompt(prompt_file: str) -> str:
@@ -40,6 +40,9 @@ async def load_prompt(prompt_file: str) -> str:
         return await f.read()
     
 agent_to_tools = {
+    "admin": [
+        "get_all_patients",
+    ],
     "intake": [
         "find_or_create_patient",
         "update_patient",
@@ -54,6 +57,8 @@ agent_to_tools = {
         "create_task",
         "update_task",
         "get_tasks",
+        "send_email",
+        "send_welcome_email_to_patient",
     ],
     "doc_extraction": [
         "get_patient",
@@ -63,6 +68,8 @@ agent_to_tools = {
         "create_task",
         "update_task",
         "get_tasks",
+        "send_email",
+        "send_document_confirmation_email",
     ],
     "care_taker": [
         "get_patient",
@@ -75,6 +82,8 @@ agent_to_tools = {
         "create_task",
         "update_task",
         "get_tasks",
+        "send_email",
+        "call_patient_to_schedule_appointment",
     ],
     "insurance": [
         "get_patient",
@@ -85,6 +94,7 @@ agent_to_tools = {
         "create_task",
         "update_task",
         "get_tasks",
+        "send_email",
     ],
 }
 
@@ -98,52 +108,60 @@ async def _create_subagents():
     doc_extraction_prompt = await load_prompt("doc_extraction.md")
     insurance_prompt = await load_prompt("insurance.md")
     care_taker_prompt = await load_prompt("care_taker.md")
-
+    admin_prompt = await load_prompt("admin.md")
     # Get tools for each agent
     intake_tools = [name_to_Tool[tool] for tool in agent_to_tools["intake"]]
     doc_extraction_tools = [name_to_Tool[tool] for tool in agent_to_tools["doc_extraction"]]
     insurance_tools = [name_to_Tool[tool] for tool in agent_to_tools["insurance"]]
     care_taker_tools = [name_to_Tool[tool] for tool in agent_to_tools["care_taker"]]
-
+    admin_tools = [name_to_Tool[tool] for tool in agent_to_tools["admin"]]
     # Create subagents as dictionaries
     return [
+        {
+            "name": "admin_agent",
+            "description": "Administers the system, manages users, and performs administrative tasks. Use for system management, user management, and administrative tasks.",
+            "system_prompt": admin_prompt,
+            "tools": admin_tools,
+            "model": "openai:gpt-4.1",
+        },
         {
             "name": "intake_agent",
             "description": "Completes patient onboarding by collecting required documents, managing consent forms, and verifying insurance information. Use for intake completion, document collection, and consent form management.",
             "system_prompt": intake_prompt,
             "tools": intake_tools,
-            "model": "openai:gpt-4o",
+            "model": "openai:gpt-4.1",
         },
         {
             "name": "doc_extraction_agent",
             "description": "Extracts medical data from uploaded documents, normalizes data, builds patient timelines, and generates summaries. Use for processing lab results, imaging reports, medical history documents, and extracting key medical information.",
             "system_prompt": doc_extraction_prompt,
             "tools": doc_extraction_tools,
-            "model": "openai:gpt-4o",
+            "model": "openai:gpt-4.1",
         },
         {
             "name": "insurance_agent",
             "description": "Verifies insurance coverage, creates and submits insurance claims, tracks claim status, handles denials and appeals, and follows up with payers. Use for claim creation, eligibility verification, claim tracking, and denial handling.",
             "system_prompt": insurance_prompt,
             "tools": insurance_tools,
-            "model": "openai:gpt-4o",
+            "model": "openai:gpt-4.1",
         },
         {
             "name": "care_taker_agent",
             "description": "Schedules appointments, manages post-visit follow-ups, sends visit recaps, and coordinates patient care. Use for appointment scheduling, post-visit tasks, sending recaps, and care coordination.",
             "system_prompt": care_taker_prompt,
             "tools": care_taker_tools,
-            "model": "openai:gpt-4o",
+            "model": "openai:gpt-4.1",
         },
     ]
 
 
 async def agent():
     subagents = await _create_subagents()
+    tools = await get_tools()
     agent = create_deep_agent(
         model=model,
         system_prompt=ORCHESTRATOR_PROMPT,
-        tools=[],
+        tools=tools,
         subagents=subagents,
     )
     return agent

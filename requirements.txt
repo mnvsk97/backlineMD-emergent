@@ -146,3 +146,10 @@ autoflake
 isort
 black
 aiofiles
+composio
+composio-langchain
+langchain
+langchain-openai
+vapi_python
+openai-agents
+composio-openai-agents

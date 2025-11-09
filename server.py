@@ -41,9 +41,23 @@ async def lifespan(app: FastAPI):
     # Startup
     await connect_db()
     
+    # Start email poller in background
+    try:
+        from email_poller import start_email_poller
+        await start_email_poller()
+        logger.info("Email poller started")
+    except Exception as e:
+        logger.warning(f"Failed to start email poller: {e}")
+    
     logger.info("BacklineMD API started successfully")
     yield
     # Shutdown
+    try:
+        from email_poller import stop_email_poller
+        await stop_email_poller()
+    except Exception as e:
+        logger.warning(f"Error stopping email poller: {e}")
+    
     await close_db()
     logger.info("BacklineMD API stopped")
 
@@ -476,10 +490,10 @@ async def regenerate_patient_summary(patient_id: str):
 {appointments_info}
 {notes_info}
 
-Generate a concise 23-line medical summary in plain text format, like a doctor's note:
+Generate a concise 2-line medical summary in plain text format, like a doctor's note:
 
 Line 1: Age, gender, and brief chief complaint/status (e.g., "43 M with [condition/status]")
-Line 2 and 3: Key findings or current clinical status or any other relevant latest info from activities and stage.
+Line 2: Key findings or current clinical status
 
 Important guidelines:
 - Keep it brief and clinical - maximum 2 lines
