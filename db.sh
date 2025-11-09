@@ -66,17 +66,16 @@ echo ""
 echo -e "${YELLOW}Step 2: Seeding database with initial data...${NC}"
 
 # Check if we're in the right directory
-if [ ! -f "backend/seed_data.py" ]; then
-    echo -e "   ${RED}✗ Error: backend/seed_data.py not found${NC}"
+if [ ! -f "seed_data.py" ]; then
+    echo -e "   ${RED}✗ Error: seed_data.py not found${NC}"
     echo "   Please run this script from the project root directory"
     exit 1
 fi
 
 # Run seed data script
-cd backend
+
 python seed_data.py
 SEED_EXIT_CODE=$?
-cd ..
 
 if [ $SEED_EXIT_CODE -eq 0 ]; then
     echo ""

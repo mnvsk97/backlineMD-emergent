@@ -5,5 +5,5 @@
     "graphs": {
         "orchestrator": "./orchestrator.py:agent"
     },
-    "env": "../.env"
+    "env": ".env"
 }

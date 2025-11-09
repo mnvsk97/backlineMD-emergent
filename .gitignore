@@ -3,7 +3,7 @@
 # IDE and editors
 .idea/
 .vscode/
-agents/.langgraph_api/
+.langgraph_api/
 # Dependencies
 node_modules/
 /node_modules

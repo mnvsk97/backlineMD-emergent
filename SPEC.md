@@ -20,7 +20,9 @@ The application follows a three-tier architecture:
 - **Database**: MongoDB
 - **AI Models**: OpenAI GPT-4o
 
-## Backend (`backend/`)
+## Backend
+
+All backend files are located at the root level of the project.
 
 ### Server (`server.py`)
 
@@ -186,7 +188,9 @@ Axios-based API client with:
 - Endpoints for all backend routes
 - Error handling
 
-## Agents (`agents/`)
+## Agents
+
+All agent files are located at the root level of the project.
 
 ### Orchestrator (`orchestrator.py`)
 
@@ -470,12 +474,19 @@ Markdown files containing system prompts for each sub-agent:
 
 ## Dependencies
 
-### Backend (`backend/requirements.txt`)
+### Backend & Agents (`requirements.txt`)
+
+Single requirements file at root level shared by both backend and agents:
 - FastAPI
 - Motor (MongoDB async driver)
 - Pydantic
 - Python-dotenv
 - Uvicorn
+- FastMCP
+- LangGraph
+- LangChain (OpenAI, Anthropic, Community, Core)
+- DeepAgents
+- LangChain MCP Adapters
 
 ### Frontend (`frontend/package.json`)
 - React 19
@@ -485,23 +496,37 @@ Markdown files containing system prompts for each sub-agent:
 - TailwindCSS
 - Axios
 
-### Agents (`agents/requirements.txt`)
-- FastMCP
-- LangGraph
-- LangChain (OpenAI, Anthropic, Community, Core)
-- DeepAgents
-- LangChain MCP Adapters
-
 ## Development Notes
 
 ### Project Structure
 ```
 backlineMD-emergent/
-├── backend/          # FastAPI backend server
+├── server.py         # FastAPI backend server
+├── models.py         # Pydantic models
+├── database.py       # MongoDB connection management
+├── logger.py         # Logging utilities
+├── orchestrator.py  # Main orchestrator agent
+├── mcp_server.py    # MCP server for agent tools
+├── langgraph.json   # LangGraph configuration
+├── requirements.txt  # Python dependencies (shared)
+├── prompts/          # Agent prompt files
+│   ├── intake.md
+│   ├── doc_extraction.md
+│   ├── insurance.md
+│   └── care_taker.md
 ├── frontend/         # React frontend application
-├── agents/           # LangGraph agents and MCP server
+│   ├── src/
+│   │   ├── pages/    # Page components
+│   │   ├── components/  # UI components
+│   │   ├── services/    # API client
+│   │   └── ...
+│   └── package.json
 ├── tests/            # Test files (placeholder)
-└── db.sh             # Database setup script
+├── seed_data.py      # Database seeding script
+├── test_api.py       # API tests
+├── db.sh             # Database setup script
+├── SPEC.md           # This specification document
+└── README.md         # Project README
 ```
 
 ### Key Design Decisions
