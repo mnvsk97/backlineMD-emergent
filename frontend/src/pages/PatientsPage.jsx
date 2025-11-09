@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { Mail, Phone, Flag } from 'lucide-react';
+import { Mail, Phone, Flag, Plus } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import CreatePatientModal from '../components/CreatePatientModal';
+import { apiService } from '../services/api';
 
 const PatientsPage = () => {
   const navigate = useNavigate();
