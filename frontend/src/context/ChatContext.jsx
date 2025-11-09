@@ -4,7 +4,7 @@ import { useCopilotReadable } from '@copilotkit/react-core';
 const ChatContext = createContext();
 
 export const ChatProvider = ({ children }) => {
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(true);
   const [pageContext, setPageContext] = useState(null);
 
   const openChat = useCallback(() => setIsChatOpen(true), []);
