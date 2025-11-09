@@ -1590,32 +1590,6 @@ async def send_consent_forms(data: dict):
 
 # ==================== MCP PROXY ROUTE ====================
 
-
-@app.api_route(
-    "/api/special/mcp/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-)
-async def special_mcp_proxy(request: Request, path: str = ""):
-    """Simple proxy to MCP server on localhost:8002"""
-    target_url = (
-        f"http://localhost:8002/mcp/{path}" if path else "http://localhost:8002/mcp"
-    )
-
-    async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method=request.method,
-            url=target_url,
-            headers=dict(request.headers),
-            params=dict(request.query_params),
-            content=await request.body(),
-        )
-        return Response(
-            content=response.content,
-            status_code=response.status_code,
-            headers=dict(response.headers),
-        )
-
-
 # ==================== EMAIL ENDPOINTS (Temporarily Disabled) ====================
 # Note: Composio integration endpoints disabled due to import issues
 # TODO: Fix composio_openai import and re-enable
