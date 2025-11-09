@@ -134,6 +134,11 @@ const TreasuryPage = () => {
         claim={selectedClaim}
       />
       
+      <CreateClaimModal
+        isOpen={showCreateClaimModal}
+        onClose={() => setShowCreateClaimModal(false)}
+      />
+      
       <Header 
         title="Treasury Claims" 
         subtitle="Manage insurance claims and billing"
