@@ -147,6 +147,11 @@ class PatientUpdate(BaseModel):
     preconditions: Optional[List[str]] = None
     latest_vitals: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
+    insurance_provider: Optional[str] = None
+    insurance_policy_number: Optional[str] = None
+    insurance_group_number: Optional[str] = None
+    insurance_effective_date: Optional[str] = None
+    insurance_expiry_date: Optional[str] = None
 
 
 class DocumentUpdate(BaseModel):

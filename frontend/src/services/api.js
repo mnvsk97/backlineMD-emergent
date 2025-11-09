@@ -76,6 +76,11 @@ export const apiService = {
   createPatient: (data) => api.post('/patients', data),
   updatePatient: (patientId, data) => api.patch(`/patients/${patientId}`, data),
   getPatientSummary: (patientId) => api.get(`/patients/${patientId}/summary`),
+  regeneratePatientSummary: (patientId) => api.post(`/patients/${patientId}/summary/regenerate`),
+  getPatientNotes: (patientId) => api.get(`/patients/${patientId}/notes`),
+  createPatientNote: (patientId, data) => api.post(`/patients/${patientId}/notes`, data),
+  getPatientActivities: (patientId) => api.get(`/patients/${patientId}/activities`),
+  getDocumentsSummary: (patientId) => api.get(`/patients/${patientId}/documents/summary`),
 
   // Documents
   getDocuments: (params = {}) => api.get('/documents', { params }),

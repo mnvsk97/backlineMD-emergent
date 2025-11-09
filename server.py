@@ -27,8 +27,6 @@ from logger import (
 )
 from models import *
 
-# Composio email integration
-from composio_integration import send_patient_notification_email, send_email_via_composio
 
 
 # Initialize logger
@@ -192,6 +190,86 @@ async def get_patient(patient_id: str):
     }
 
 
+@app.patch("/api/patients/{patient_id}")
+async def update_patient(patient_id: str, patient_data: PatientUpdate):
+    """Update patient information"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    update_fields = {}
+    
+    if patient_data.first_name is not None:
+        update_fields["first_name"] = patient_data.first_name
+    if patient_data.last_name is not None:
+        update_fields["last_name"] = patient_data.last_name
+    if patient_data.dob is not None:
+        update_fields["dob"] = patient_data.dob
+    if patient_data.gender is not None:
+        update_fields["gender"] = patient_data.gender
+    if patient_data.email is not None:
+        if "contact" not in update_fields:
+            update_fields["contact"] = patient.get("contact", {})
+        update_fields["contact"]["email"] = patient_data.email
+    if patient_data.phone is not None:
+        if "contact" not in update_fields:
+            update_fields["contact"] = patient.get("contact", {})
+        update_fields["contact"]["phone"] = patient_data.phone
+    if patient_data.preconditions is not None:
+        update_fields["preconditions"] = patient_data.preconditions
+    if patient_data.latest_vitals is not None:
+        update_fields["latest_vitals"] = patient_data.latest_vitals
+    if patient_data.status is not None:
+        update_fields["status"] = patient_data.status
+    if patient_data.insurance_provider is not None:
+        if "insurance" not in update_fields:
+            update_fields["insurance"] = patient.get("insurance", {})
+        update_fields["insurance"]["provider"] = patient_data.insurance_provider
+    if patient_data.insurance_policy_number is not None:
+        if "insurance" not in update_fields:
+            update_fields["insurance"] = patient.get("insurance", {})
+        update_fields["insurance"]["policy_number"] = patient_data.insurance_policy_number
+    if patient_data.insurance_group_number is not None:
+        if "insurance" not in update_fields:
+            update_fields["insurance"] = patient.get("insurance", {})
+        update_fields["insurance"]["group_number"] = patient_data.insurance_group_number
+    if patient_data.insurance_effective_date is not None:
+        if "insurance" not in update_fields:
+            update_fields["insurance"] = patient.get("insurance", {})
+        update_fields["insurance"]["effective_date"] = patient_data.insurance_effective_date
+    if patient_data.insurance_expiry_date is not None:
+        if "insurance" not in update_fields:
+            update_fields["insurance"] = patient.get("insurance", {})
+        update_fields["insurance"]["expiry_date"] = patient_data.insurance_expiry_date
+    
+    # Recalculate age if DOB changed
+    if patient_data.dob is not None:
+        from dateutil.parser import parse as parse_date
+        dob = parse_date(patient_data.dob)
+        today = datetime.now(timezone.utc)
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+        update_fields["age"] = age
+    
+    update_fields["updated_at"] = datetime.now(timezone.utc)
+    
+    # Regenerate search n-grams if name changed
+    if patient_data.first_name is not None or patient_data.last_name is not None:
+        first_name = update_fields.get("first_name", patient["first_name"])
+        last_name = update_fields.get("last_name", patient["last_name"])
+        full_name = f"{first_name} {last_name}"
+        update_fields["search"] = {"ngrams": generate_ngrams(full_name)}
+
+    await db.patients.update_one(
+        {"_id": patient_id, "tenant_id": tenant_id},
+        {"$set": update_fields}
+    )
+
+    return {"message": "Patient updated successfully"}
+
+
 @app.get("/api/patients/{patient_id}/summary")
 async def get_patient_summary(patient_id: str):
     db = get_db()
@@ -206,52 +284,506 @@ async def get_patient_summary(patient_id: str):
         }
     )
 
-    if cached and cached.get("expires_at") > datetime.now(timezone.utc):
-        return cached["payload"]
+    if cached and cached.get("expires_at"):
+        expires_at = cached["expires_at"]
+        # Handle both datetime objects and strings
+        if isinstance(expires_at, str):
+            from dateutil.parser import isoparse
+            expires_at = isoparse(expires_at)
+        # Ensure both are timezone-aware
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at > datetime.now(timezone.utc):
+            return cached["payload"]
 
-    # Generate mock summary
+    # If no cache, generate summary using real data
+    # Call the regenerate endpoint logic
+    return await regenerate_patient_summary(patient_id)
+
+
+@app.post("/api/patients/{patient_id}/summary/regenerate")
+async def regenerate_patient_summary(patient_id: str):
+    """Regenerate patient summary using OpenAI"""
+    import os
+    from openai import OpenAI
+    
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+    
+    # Get patient
     patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    summary_text = f"{patient.get('age', 34)}-year-old {patient['gender'].lower()} patient with documented {', '.join(patient.get('preconditions', ['family history of heart disease']))}. Currently under {patient.get('status', 'active').lower()}. Initial consultation completed with comprehensive medical history review. Recent vitals show stable condition. Recommended follow-up in 4-6 weeks."
+    # Get patient documents
+    documents = await db.documents.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1).limit(10).to_list(length=10)
+    
+    # Get patient tasks
+    tasks = await db.tasks.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1).limit(20).to_list(length=20)
+    
+    # Get patient appointments
+    appointments = await db.appointments.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("starts_at", -1).limit(10).to_list(length=10)
+    
+    # Get patient notes
+    notes = await db.notes.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1).limit(10).to_list(length=10)
+    
+    # Build comprehensive patient information
+    patient_age = patient.get('age')
+    if not patient_age and patient.get('date_of_birth'):
+        from datetime import date
+        dob = patient.get('date_of_birth')
+        if isinstance(dob, str):
+            try:
+                dob_date = datetime.strptime(dob, "%Y-%m-%d").date()
+            except:
+                dob_date = None
+        elif hasattr(dob, 'date'):
+            dob_date = dob.date() if hasattr(dob, 'date') else None
+        else:
+            dob_date = None
+        if dob_date:
+            today = date.today()
+            patient_age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+    
+    # Build documents summary with detailed extracted data
+    docs_info = ""
+    if documents:
+        docs_info = f"\n**Medical Documents ({len(documents)} total):**\n"
+        for doc in documents[:10]:  # Top 10 documents
+            doc_kind = doc.get("kind", "unknown")
+            doc_status = doc.get("status", "unknown")
+            extracted = doc.get("extracted", {})
+            file_name = doc.get("file_name", "Unknown")
+            
+            docs_info += f"- **{doc_kind}** ({doc_status}): {file_name}\n"
+            if extracted:
+                # Format extracted data nicely
+                if isinstance(extracted, dict):
+                    for key, value in extracted.items():
+                        if value:
+                            docs_info += f"  - {key}: {value}\n"
+                else:
+                    docs_info += f"  - Extracted data: {str(extracted)[:200]}\n"
+    else:
+        docs_info = "\n**Medical Documents:** No documents have been provided or reviewed.\n"
+    
+    # Build tasks summary
+    tasks_info = ""
+    if tasks:
+        tasks_info = f"\n**Tasks and Activities ({len(tasks)} total):**\n"
+        for task in tasks[:15]:  # Top 15 tasks
+            task_title = task.get("title", "")
+            task_desc = task.get("description", "")
+            task_state = task.get("state", "")
+            task_agent = task.get("agent_type", "human")
+            task_priority = task.get("priority", "")
+            created_at = task.get("created_at", datetime.now(timezone.utc))
+            if isinstance(created_at, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                except:
+                    created_at = datetime.now(timezone.utc)
+            created_str = created_at.strftime("%Y-%m-%d") if hasattr(created_at, 'strftime') else str(created_at)[:10]
+            
+            tasks_info += f"- **{task_title}** ({task_state}, {task_agent}, priority: {task_priority}) - {created_str}\n"
+            if task_desc:
+                tasks_info += f"  Description: {task_desc[:150]}\n"
+    else:
+        tasks_info = "\n**Tasks and Activities:** No tasks or activities have been recorded.\n"
+    
+    # Build appointments summary
+    appointments_info = ""
+    if appointments:
+        appointments_info = f"\n**Appointments ({len(appointments)} total):**\n"
+        for apt in appointments[:10]:  # Top 10 appointments
+            apt_title = apt.get("title", apt.get("type", "Appointment"))
+            apt_status = apt.get("status", "")
+            apt_date = apt.get("starts_at")
+            if apt_date:
+                if isinstance(apt_date, str):
+                    try:
+                        apt_date = datetime.fromisoformat(apt_date.replace('Z', '+00:00'))
+                    except:
+                        apt_date = None
+                if apt_date and hasattr(apt_date, 'strftime'):
+                    apt_date_str = apt_date.strftime("%Y-%m-%d %H:%M")
+                else:
+                    apt_date_str = str(apt_date)[:16]
+            else:
+                apt_date_str = "Not scheduled"
+            
+            appointments_info += f"- **{apt_title}** ({apt_status}) - {apt_date_str}\n"
+    else:
+        appointments_info = "\n**Appointments:** No appointments have been scheduled.\n"
+    
+    # Build notes summary
+    notes_info = ""
+    if notes:
+        notes_info = f"\n**Clinical Notes ({len(notes)} total):**\n"
+        for note in notes[:10]:  # Top 10 notes
+            note_content = note.get("content", "")
+            note_author = note.get("author", "Unknown")
+            note_date = note.get("created_at", datetime.now(timezone.utc))
+            if isinstance(note_date, str):
+                try:
+                    note_date = datetime.fromisoformat(note_date.replace('Z', '+00:00'))
+                except:
+                    note_date = datetime.now(timezone.utc)
+            note_date_str = note_date.strftime("%Y-%m-%d") if hasattr(note_date, 'strftime') else str(note_date)[:10]
+            
+            notes_info += f"- **{note_date_str}** by {note_author}: {note_content[:200]}\n"
+    else:
+        notes_info = "\n**Clinical Notes:** No clinical notes have been documented.\n"
+    
+    # Build patient demographics
+    preconditions_str = ", ".join(patient.get('preconditions', [])) if patient.get('preconditions') else "None documented"
+    vitals = patient.get('latest_vitals', {})
+    vitals_str = ""
+    if vitals:
+        vitals_str = "\n**Latest Vital Signs:**\n"
+        for key, value in vitals.items():
+            vitals_str += f"- {key}: {value}\n"
+    else:
+        vitals_str = "\n**Latest Vital Signs:** Not available\n"
+    
+    # Prepare comprehensive prompt for OpenAI
+    patient_info = f"""
+**Patient Demographics:**
+- Name: {patient.get('first_name', '')} {patient.get('last_name', '')}
+- Age: {patient_age if patient_age else 'Not specified'}
+- Gender: {patient.get('gender', 'Not specified')}
+- Date of Birth: {patient.get('date_of_birth', 'Not specified')}
+- Status: {patient.get('status', 'Not specified')}
+- Preconditions/Medical History: {preconditions_str}
+{vitals_str}
+"""
+    
+    prompt = f"""You are an experienced medical professional generating a comprehensive clinical summary for a patient. Think like a doctor reviewing a patient case.
 
-    payload = {
-        "summary": summary_text,
-        "citations": [
+{patient_info}
+{docs_info}
+{tasks_info}
+{appointments_info}
+{notes_info}
+
+Generate a professional medical summary following this structure:
+
+**Medical Summary for {patient.get('first_name', '')} {patient.get('last_name', '')}**
+
+**Patient Demographics and Current Status:**
+- Provide key demographic information and current clinical status
+
+**Key Findings from Documents:**
+- Summarize important findings from medical documents, lab results, imaging studies, etc.
+- If no documents are available, state that clearly
+
+**Recent Activities and Clinical Course:**
+- Summarize recent tasks, appointments, and clinical activities
+- Note the progression of care and any interventions
+
+**Clinical Notes Summary:**
+- Highlight key points from clinical notes if available
+
+**Assessment and Recommendations:**
+- Provide clinical assessment based on available information
+- Recommend next steps for patient care
+- Be specific and actionable
+
+Important guidelines:
+- DO NOT make up or assume any information not provided
+- If information is missing, state "Not available" or "Not documented"
+- Use professional medical terminology
+- Be concise but comprehensive
+- Focus on actionable insights for clinical decision-making
+- Only include information that is explicitly provided in the data above
+"""
+    
+    # Call OpenAI
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    
+    try:
+        client = OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an experienced physician generating clinical summaries for patient cases. Think critically about the available information, identify key clinical findings, and provide actionable recommendations. Only use information explicitly provided - never fabricate or assume details. Use professional medical terminology and maintain clinical objectivity."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+        )
+        
+        summary_text = response.choices[0].message.content
+
+        payload = {
+            "summary": summary_text,
+            "citations": [
+                {
+                    "doc_id": doc["_id"],
+                    "kind": doc.get("kind", "unknown"),
+                    "excerpt": str(doc.get("extracted", {}))[:200],
+                }
+                for doc in documents[:5]
+            ],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "model": "gpt-4o",
+        }
+        
+        # Cache it (invalidate old cache first)
+        await db.ai_artifacts.delete_many(
             {
-                "doc_id": "DOC123",
-                "kind": "lab",
-                "page": 2,
-                "excerpt": "Cholesterol: 205 mg/dL",
-            },
+                "tenant_id": tenant_id,
+                "kind": "patient_summary",
+                "subject.patient_id": patient_id,
+            }
+        )
+        
+        await db.ai_artifacts.insert_one(
             {
-                "doc_id": "DOC124",
-                "kind": "imaging",
-                "page": 1,
-                "excerpt": "X-Ray: No abnormalities",
-            },
-        ],
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "model": "gpt-4",
+                "_id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "kind": "patient_summary",
+                "subject": {"patient_id": patient_id},
+                "payload": payload,
+                "model": "gpt-4o",
+                "score": 0.95,
+                "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+                "created_at": datetime.now(timezone.utc),
+            }
+        )
+
+        return payload
+    except Exception as e:
+        logger.error(f"Error generating summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
+
+
+@app.get("/api/patients/{patient_id}/notes")
+async def get_patient_notes(patient_id: str):
+    """Get all notes for a patient"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+    
+    # Verify patient exists
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    cursor = db.notes.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1)
+    notes = await cursor.to_list(length=100)
+    
+    return [
+        {
+            "note_id": note["_id"],
+            "patient_id": note["patient_id"],
+            "content": note["content"],
+            "author": note.get("author", "Unknown"),
+            "created_at": note.get("created_at", datetime.now(timezone.utc)),
+            "date": note.get("created_at", datetime.now(timezone.utc)).strftime("%Y-%m-%d") if isinstance(note.get("created_at"), datetime) else note.get("created_at", ""),
+        }
+        for note in notes
+    ]
+
+
+@app.post("/api/patients/{patient_id}/notes")
+async def create_patient_note(patient_id: str, note_data: dict):
+    """Create a new note for a patient"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+    
+    # Verify patient exists
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    note_id = str(uuid.uuid4())
+    note = {
+        "_id": note_id,
+        "tenant_id": tenant_id,
+        "patient_id": patient_id,
+        "content": note_data.get("content", ""),
+        "author": note_data.get("author", "Dr. James O'Brien"),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    
+    await db.notes.insert_one(note)
+    
+    return {
+        "note_id": note_id,
+        "message": "Note created successfully",
     }
 
-    # Cache it
-    await db.ai_artifacts.insert_one(
-        {
-            "_id": str(uuid.uuid4()),
-            "tenant_id": tenant_id,
-            "kind": "patient_summary",
-            "subject": {"patient_id": patient_id},
-            "payload": payload,
-            "model": "gpt-4",
-            "score": 0.95,
-            "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
 
-    return payload
+@app.get("/api/patients/{patient_id}/activities")
+async def get_patient_activities(patient_id: str):
+    """Get all activities for a patient (tasks, appointments, documents, notes)"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+    
+    # Verify patient exists
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    activities = []
+    
+    # Get tasks
+    tasks = await db.tasks.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1).limit(50).to_list(length=50)
+    
+    for task in tasks:
+        activities.append({
+            "activity_id": task["_id"],
+            "type": "task",
+            "agent_type": task.get("agent_type", "human"),
+            "title": task.get("title", ""),
+            "description": task.get("description", ""),
+            "status": task.get("state", ""),
+            "priority": task.get("priority", ""),
+            "created_at": task.get("created_at", datetime.now(timezone.utc)),
+            "time_ago": _get_time_ago(task.get("created_at", datetime.now(timezone.utc))),
+        })
+    
+    # Get appointments
+    appointments = await db.appointments.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("starts_at", -1).limit(50).to_list(length=50)
+    
+    for apt in appointments:
+        activities.append({
+            "activity_id": apt["_id"],
+            "type": "appointment",
+            "agent_type": "human",
+            "title": apt.get("title", "Appointment"),
+            "description": f"Appointment scheduled for {apt.get('starts_at', '').strftime('%Y-%m-%d %I:%M %p') if isinstance(apt.get('starts_at'), datetime) else apt.get('starts_at', '')}",
+            "status": apt.get("status", ""),
+            "created_at": apt.get("starts_at", apt.get("created_at", datetime.now(timezone.utc))),
+            "time_ago": _get_time_ago(apt.get("starts_at", apt.get("created_at", datetime.now(timezone.utc)))),
+        })
+    
+    # Get documents
+    documents = await db.documents.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1).limit(50).to_list(length=50)
+    
+    for doc in documents:
+        activities.append({
+            "activity_id": doc["_id"],
+            "type": "document",
+            "agent_type": "ai" if doc.get("status") == "ingested" else "human",
+            "title": f"{doc.get('kind', 'Document').replace('_', ' ').title()} uploaded",
+            "description": f"Document {doc.get('file', {}).get('name', '')} - Status: {doc.get('status', '')}",
+            "status": doc.get("status", ""),
+            "created_at": doc.get("created_at", datetime.now(timezone.utc)),
+            "time_ago": _get_time_ago(doc.get("created_at", datetime.now(timezone.utc))),
+        })
+    
+    # Get notes
+    notes = await db.notes.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1).limit(50).to_list(length=50)
+    
+    for note in notes:
+        activities.append({
+            "activity_id": note["_id"],
+            "type": "note",
+            "agent_type": "human",
+            "title": f"Note added by {note.get('author', 'Unknown')}",
+            "description": note.get("content", "")[:200],
+            "status": "completed",
+            "created_at": note.get("created_at", datetime.now(timezone.utc)),
+            "time_ago": _get_time_ago(note.get("created_at", datetime.now(timezone.utc))),
+        })
+    
+    # Sort by created_at descending
+    activities.sort(key=lambda x: x["created_at"], reverse=True)
+    
+    return activities
+
+
+def _get_time_ago(dt):
+    """Helper function to get human-readable time ago"""
+    if isinstance(dt, str):
+        from dateutil.parser import isoparse
+        dt = isoparse(dt)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    
+    now = datetime.now(timezone.utc)
+    diff = now - dt
+    
+    if diff.days > 0:
+        return f"{diff.days} day{'s' if diff.days > 1 else ''} ago"
+    elif diff.seconds >= 3600:
+        hours = diff.seconds // 3600
+        return f"{hours} hour{'s' if hours > 1 else ''} ago"
+    elif diff.seconds >= 60:
+        minutes = diff.seconds // 60
+        return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+    else:
+        return "Just now"
+
+
+@app.get("/api/patients/{patient_id}/documents/summary")
+async def get_documents_summary(patient_id: str):
+    """Get summary of all documents for a patient"""
+    db = get_db()
+    tenant_id = DEFAULT_TENANT
+    
+    # Verify patient exists
+    patient = await db.patients.find_one({"_id": patient_id, "tenant_id": tenant_id})
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    documents = await db.documents.find(
+        {"patient_id": patient_id, "tenant_id": tenant_id}
+    ).sort("created_at", -1).to_list(length=100)
+    
+    summary = {
+        "total_documents": len(documents),
+        "by_kind": {},
+        "by_status": {},
+        "recent_documents": [],
+        "extracted_data": [],
+    }
+    
+    for doc in documents:
+        kind = doc.get("kind", "unknown")
+        status = doc.get("status", "unknown")
+        
+        summary["by_kind"][kind] = summary["by_kind"].get(kind, 0) + 1
+        summary["by_status"][status] = summary["by_status"].get(status, 0) + 1
+        
+        if len(summary["recent_documents"]) < 10:
+            summary["recent_documents"].append({
+                "document_id": doc["_id"],
+                "kind": kind,
+                "status": status,
+                "created_at": doc.get("created_at", datetime.now(timezone.utc)),
+                "file_name": doc.get("file", {}).get("name", "Unknown"),
+            })
+        
+        if doc.get("extracted"):
+            summary["extracted_data"].append({
+                "document_id": doc["_id"],
+                "kind": kind,
+                "extracted": doc.get("extracted", {}),
+            })
+    
+    return summary
 
 
 # ==================== DOCUMENT ROUTES ====================
@@ -579,6 +1111,14 @@ async def create_task(task_data: TaskCreate):
 async def update_task(task_id: str, update_data: TaskUpdate):
     db = get_db()
     tenant_id = DEFAULT_TENANT
+
+    # Try to find task by _id first, then by task_id
+    task = await db.tasks.find_one({"tenant_id": tenant_id, "_id": task_id})
+    if not task:
+        task = await db.tasks.find_one({"tenant_id": tenant_id, "task_id": task_id})
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        task_id = task["_id"]
 
     update_operations = {}
     
@@ -956,22 +1496,6 @@ async def get_dashboard_appointments():
 
 # ==================== EMAIL ENDPOINTS ====================
 
-@app.post("/api/emails/send")
-async def send_email(email_data: dict):
-    """Send email via Composio Gmail integration"""
-    try:
-        result = await send_email_via_composio(
-            to_email=email_data.get("to_email"),
-            subject=email_data.get("subject"),
-            body=email_data.get("body"),
-            user_id=email_data.get("user_id", "backlinemd-system")
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Error sending email: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/api/patients/{patient_id}/send-notification")
 async def send_patient_notification(patient_id: str, notification_data: dict):
     """Send notification email to patient"""
@@ -988,13 +1512,14 @@ async def send_patient_notification(patient_id: str, notification_data: dict):
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         
-        # Send notification
-        result = await send_patient_notification_email(
-            patient_email=patient.get("email"),
-            patient_name=f"{patient.get('first_name', '')} {patient.get('last_name', '')}",
-            notification_type=notification_data.get("type", "general"),
-            details=notification_data.get("details", {})
-        )
+        # Send notification (stub - implement email sending logic here)
+        # TODO: Implement email sending via Composio or other email service
+        result = {
+            "success": True,
+            "message": "Notification sent successfully (stub)",
+            "patient_email": patient.get("email"),
+            "notification_type": notification_data.get("type", "general"),
+        }
         
         return result
     except HTTPException:

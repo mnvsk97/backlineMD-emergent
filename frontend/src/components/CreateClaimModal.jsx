@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
 
-const CreateClaimModal = ({ isOpen, onClose }) => {
+const CreateClaimModal = ({ isOpen, onClose, patientId: initialPatientId = null, onSuccess }) => {
   const [formData, setFormData] = useState({
     patientId: '',
     insuranceProvider: '',
@@ -25,9 +25,9 @@ const CreateClaimModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       fetchPatients();
-      // Reset form when modal opens
+      // Reset form when modal opens, but pre-fill patientId if provided
       setFormData({
-        patientId: '',
+        patientId: initialPatientId || '',
         insuranceProvider: '',
         amount: '',
         procedureCode: '',
@@ -36,7 +36,7 @@ const CreateClaimModal = ({ isOpen, onClose }) => {
         description: ''
       });
     }
-  }, [isOpen]);
+  }, [isOpen, initialPatientId]);
 
   const fetchPatients = async () => {
     try {
@@ -50,8 +50,9 @@ const CreateClaimModal = ({ isOpen, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validation
-    if (!formData.patientId) {
+    // Validation - use initialPatientId if provided, otherwise use formData.patientId
+    const finalPatientId = initialPatientId || formData.patientId;
+    if (!finalPatientId) {
       toast.error('Please select a patient');
       return;
     }
@@ -70,12 +71,13 @@ const CreateClaimModal = ({ isOpen, onClose }) => {
 
     setLoading(true);
     try {
-      // Mock API call - replace with actual backend endpoint
-      const selectedPatient = patients.find(p => p.patient_id === formData.patientId);
+      // Use initialPatientId if provided, otherwise use formData.patientId
+      const finalPatientId = initialPatientId || formData.patientId;
+      const selectedPatient = patients.find(p => p.patient_id === finalPatientId);
       
       await axios.post(`${API}/claims`, {
-        patient_id: formData.patientId,
-        patient_name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
+        patient_id: finalPatientId,
+        patient_name: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Unknown Patient',
         insurance_provider: formData.insuranceProvider,
         amount: parseFloat(formData.amount),
         procedure_code: formData.procedureCode,
@@ -88,8 +90,12 @@ const CreateClaimModal = ({ isOpen, onClose }) => {
       
       toast.success('Claim created and submitted successfully!');
       onClose();
-      // Trigger refresh
-      setTimeout(() => window.location.reload(), 1000);
+      // Call onSuccess callback if provided, otherwise reload
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        setTimeout(() => window.location.reload(), 1000);
+      }
     } catch (error) {
       console.error('Error creating claim:', error);
       toast.error('Failed to create claim');
@@ -133,24 +139,26 @@ const CreateClaimModal = ({ isOpen, onClose }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Patient Selection */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Patient <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.patientId}
-              onChange={(e) => handleChange('patientId', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            >
-              <option value="">Select patient...</option>
-              {patients.map((patient) => (
-                <option key={patient.patient_id} value={patient.patient_id}>
-                  {patient.first_name} {patient.last_name} - {patient.email}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Patient Selection - Only show if patientId not provided */}
+          {!initialPatientId && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Patient <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.patientId}
+                onChange={(e) => handleChange('patientId', e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="">Select patient...</option>
+                {patients.map((patient) => (
+                  <option key={patient.patient_id} value={patient.patient_id}>
+                    {patient.first_name} {patient.last_name} - {patient.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Insurance Provider and Amount Row */}
           <div className="grid grid-cols-2 gap-4">

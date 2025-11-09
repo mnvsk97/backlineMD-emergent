@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
 const API = `${BACKEND_URL}/api`;
 
-const CreateTaskModal = ({ isOpen, onClose, prefilledData = {} }) => {
+const CreateTaskModal = ({ isOpen, onClose, prefilledData = {}, onSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -83,8 +83,12 @@ const CreateTaskModal = ({ isOpen, onClose, prefilledData = {} }) => {
       
       toast.success('Task created successfully!');
       onClose();
-      // Trigger a page refresh or callback to update task list
-      window.location.reload();
+      // Call onSuccess callback if provided, otherwise reload
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.location.reload();
+      }
     } catch (error) {
       console.error('Error creating task:', error);
       toast.error('Failed to create task');
@@ -102,12 +106,12 @@ const CreateTaskModal = ({ isOpen, onClose, prefilledData = {} }) => {
   const assigneeOptions = [
     { value: '', label: 'Select assignee...' },
     { value: 'Dr. James O\'Brien', label: 'Dr. James O\'Brien' },
-    { value: 'Dr. Sarah Chen', label: 'Dr. Sarah Chen' },
-    { value: 'Nurse Sarah Chen', label: 'Nurse Sarah Chen' },
-    { value: 'AI - Insurance Agent', label: 'AI - Insurance Agent' },
-    { value: 'AI - Document Extractor', label: 'AI - Document Extractor' },
-    { value: 'AI - Verification Agent', label: 'AI - Verification Agent' },
     { value: 'Back Office Staff', label: 'Back Office Staff' },
+    { value: 'AI - Insurance Agent', label: 'AI - Insurance Agent' },
+    { value: 'AI - Document Extraction', label: 'AI - Document Extraction' },
+    { value: 'AI - Intake', label: 'AI - Intake' },
+    { value: 'AI - Care Coordinator', label: 'AI - Care Coordinator' },
+    { value: 'AI - Customer Support', label: 'AI - Customer Support' },
   ];
 
   const priorityOptions = [

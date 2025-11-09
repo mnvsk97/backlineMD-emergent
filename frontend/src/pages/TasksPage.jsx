@@ -112,9 +112,11 @@ const TasksPage = () => {
             </Card>
           ) : (
             <div className="space-y-4">
-              {filteredTasks.map((task) => (
+              {filteredTasks.map((task) => {
+                const taskId = task.task_id || task._id || task.id;
+                return (
                 <Card
-                  key={task.task_id}
+                  key={taskId}
                   className="p-6 border-l-4 border-purple-400 hover:border-purple-500 bg-white hover:shadow-lg transition-all cursor-pointer"
                   onClick={openChat}
                 >
@@ -128,12 +130,12 @@ const TasksPage = () => {
                         <div className="flex items-center justify-between mb-2">
                           <div>
                             <h3 className="font-semibold text-gray-900 text-lg mb-1">{task.patient_name}</h3>
-                            <p className="text-sm text-gray-600">{task.agent_type.replace('_', ' ')}</p>
+                            <p className="text-sm text-gray-600">{task.agent_type?.replace('_', ' ') || 'Unknown'}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-500 flex items-center gap-1">
                               <Clock className="w-4 h-4" />
-                              {task.waiting_minutes}m ago
+                              {task.waiting_minutes || 0}m ago
                             </span>
                           </div>
                         </div>
@@ -142,9 +144,11 @@ const TasksPage = () => {
                         <p className="text-sm text-gray-600 mb-4">{task.description}</p>
                         
                         <div className="flex items-center gap-3 flex-wrap">
-                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
-                            {Math.round(task.confidence_score * 100)}% confidence
-                          </span>
+                          {task.confidence_score && (
+                            <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                              {Math.round(task.confidence_score * 100)}% confidence
+                            </span>
+                          )}
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                             task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
                             task.priority === 'high' ? 'bg-purple-100 text-purple-700' :
@@ -152,7 +156,7 @@ const TasksPage = () => {
                           }`}>
                             {task.priority}
                           </span>
-                          {task.confidence_score < 0.9 && (
+                          {task.confidence_score && task.confidence_score < 0.9 && (
                             <span className="flex items-center gap-1 text-sm text-purple-600">
                               <AlertTriangle className="w-4 h-4" />
                               Needs review
@@ -165,9 +169,19 @@ const TasksPage = () => {
                     <div className="flex gap-2">
                       <button 
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          // Handle approve
+                          try {
+                            await apiService.updateTask(taskId, {
+                              state: 'done',
+                              comment: 'Task approved and completed'
+                            });
+                            toast.success('Task approved successfully');
+                            fetchTasks();
+                          } catch (error) {
+                            console.error('Error approving task:', error);
+                            toast.error('Failed to approve task');
+                          }
                         }}
                       >
                         <CheckCircle className="w-4 h-4" />
@@ -175,9 +189,19 @@ const TasksPage = () => {
                       </button>
                       <button 
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          // Handle reject
+                          try {
+                            await apiService.updateTask(taskId, {
+                              state: 'cancelled',
+                              comment: 'Task rejected'
+                            });
+                            toast.success('Task rejected');
+                            fetchTasks();
+                          } catch (error) {
+                            console.error('Error rejecting task:', error);
+                            toast.error('Failed to reject task');
+                          }
                         }}
                       >
                         <XCircle className="w-4 h-4" />
@@ -186,7 +210,7 @@ const TasksPage = () => {
                     </div>
                   </div>
                 </Card>
-              ))}
+              )})}
             </div>
           )}
         </div>
