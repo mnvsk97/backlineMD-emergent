@@ -61,48 +61,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# CopilotKit proxy to LangGraph
-@app.api_route("/api/copilot", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def copilot_proxy(request: Request):
-    """Proxy all CopilotKit requests to LangGraph server"""
-    import httpx
-    
-    # Get the request details
-    method = request.method
-    path = request.url.path
-    query_params = str(request.url.query)
-    body = await request.body()
-    
-    # Build target URL
-    target_url = f"http://127.0.0.1:2024{path}"
-    if query_params:
-        target_url += f"?{query_params}"
-    
-    # Forward headers
-    headers = dict(request.headers)
-    headers.pop("host", None)  # Remove host header
-    
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            response = await client.request(
-                method=method,
-                url=target_url,
-                content=body,
-                headers=headers,
-            )
-            
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.headers.get("content-type"),
-            )
-        except Exception as e:
-            logger.error(f"CopilotKit proxy error: {str(e)}")
-            return Response(
-                content=str(e),
-                status_code=500,
-            )
+# CopilotKit integration with remote LangGraph
+from copilotkit.integrations.fastapi import add_fastapi_endpoint
+from copilotkit import CopilotKitSDK, LangGraphAgent
+from langgraph_sdk import get_client
+
+# Get the remote LangGraph client
+langgraph_client = get_client(url="http://127.0.0.1:2024")
+
+# Get the graph from the client
+graph = langgraph_client.assistants.get(assistant_id="orchestrator")
+
+# Initialize CopilotKit SDK with the remote LangGraph agent
+sdk = CopilotKitSDK(
+    agents=[
+        LangGraphAgent(
+            name="orchestrator",
+            description="BacklineMD orchestrator agent that helps with patient management, tasks, and insurance claims",
+            graph=graph,
+        )
+    ],
+)
+
+# Add the CopilotKit endpoint
+add_fastapi_endpoint(app, sdk, "/api/copilot")
 
 
 # ==================== HELPER FUNCTIONS ====================
