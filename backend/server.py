@@ -482,7 +482,7 @@ async def update_document(
 # ==================== MOCK AGENT FUNCTION ====================
 
 async def trigger_document_extraction(document_id: str, tenant_id: str):
-    \"\"\"Mock document extraction agent\"\"\"
+    """Mock document extraction agent"""
     db = get_db()
     
     # Wait 2 seconds
