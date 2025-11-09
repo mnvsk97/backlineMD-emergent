@@ -1,0 +1,9 @@
+fastmcp
+langchain
+langgraph
+langchain_mcp_adapters
+langchain_anthropic
+langchain_openai
+langchain_community
+langchain_core
+deepagents
