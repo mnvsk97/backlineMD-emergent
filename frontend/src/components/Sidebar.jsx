@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Activity, Users, ClipboardList, Settings, LogOut } from 'lucide-react';
+import { Activity, Users, ClipboardList } from 'lucide-react';
 
 const Sidebar = () => {
   const navItems = [
@@ -42,18 +42,6 @@ const Sidebar = () => {
           );
         })}
       </nav>
-
-      {/* Bottom Actions */}
-      <div className="p-4 border-t border-gray-200 space-y-2">
-        <button className="flex items-center gap-3 px-4 py-3 w-full text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
-          <Settings className="w-5 h-5" />
-          <span className="font-medium">Settings</span>
-        </button>
-        <button className="flex items-center gap-3 px-4 py-3 w-full text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium">Logout</span>
-        </button>
-      </div>
     </div>
   );
 };
