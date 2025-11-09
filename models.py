@@ -156,6 +156,9 @@ class PatientUpdate(BaseModel):
     preconditions: Optional[List[str]] = None
     latest_vitals: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
+    weight: Optional[float] = None
+    height: Optional[float] = None
+    blood_type: Optional[str] = None
     insurance_provider: Optional[str] = None
     insurance_policy_number: Optional[str] = None
     insurance_group_number: Optional[str] = None
