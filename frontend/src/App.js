@@ -8,6 +8,7 @@ import DashboardPage from './pages/DashboardPage';
 import PatientsPage from './pages/PatientsPage';
 import PatientDetailsPage from './pages/PatientDetailsPage';
 import TasksPage from './pages/TasksPage';
+import TreasuryPage from './pages/TreasuryPage';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
