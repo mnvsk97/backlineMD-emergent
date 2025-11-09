@@ -6,6 +6,7 @@ import { useChat, useCopilotContext } from '../context/ChatContext';
 import Header from '../components/Header';
 import CreateTaskModal from '../components/CreateTaskModal';
 import ClaimDetailModal from '../components/ClaimDetailModal';
+import CreateClaimModal from '../components/CreateClaimModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
