@@ -11,12 +11,24 @@ db = None
 
 async def connect_db():
     global client, db
+    
+    # Configure SSL/TLS options for MongoDB Atlas
+    ssl_options = {}
+    if "mongodb+srv://" in MONGO_URL or "ssl=true" in MONGO_URL.lower() or "tls=true" in MONGO_URL.lower():
+        import ssl
+        ssl_options = {
+            "tls": True,
+            "tlsAllowInvalidCertificates": True,
+            "ssl_cert_reqs": ssl.CERT_NONE
+        }
+    
     client = AsyncIOMotorClient(
         MONGO_URL,
         maxPoolSize=50,
         minPoolSize=10,
-        serverSelectionTimeoutMS=5000,
+        serverSelectionTimeoutMS=30000,
         retryWrites=True,
+        **ssl_options
     )
     db = client.backlinemd
     print(f"✓ Connected to MongoDB at {MONGO_URL}")
