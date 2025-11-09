@@ -195,7 +195,7 @@ const TreasuryPage = () => {
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="font-semibold text-gray-900 text-lg">{claim.patient_name}</h3>
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(claim.status)}`}>
-                            {claim.status}
+                            {formatStatus(claim.status)}
                           </span>
                         </div>
                         
