@@ -932,11 +932,37 @@ async def get_dashboard_appointments():
 # ==================== COPILOT ENDPOINT ====================
 
 
-@app.post("/api/copilot")
-async def copilot_endpoint(request: dict):
-    """Simple CopilotKit endpoint"""
-    return {
-        "response": "I'm here to help with BacklineMD. How can I assist you today?",
-        "context": "Dashboard",
-    }
+@app.post("/api/copilotkit")
+async def copilotkit_proxy(request: Request):
+    """Proxy CopilotKit requests to LangGraph server"""
+    import httpx
+    
+    # Get the request body
+    body = await request.body()
+    
+    # Forward the request to LangGraph server
+    langgraph_url = "http://127.0.0.1:2024"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            # Forward POST request to LangGraph
+            response = await client.post(
+                f"{langgraph_url}/threads",
+                content=body,
+                headers={
+                    "Content-Type": "application/json",
+                    **dict(request.headers)
+                },
+                timeout=60.0
+            )
+            
+            # Return the response from LangGraph
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
+        except Exception as e:
+            logger.error(f"Error proxying to LangGraph: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"LangGraph proxy error: {str(e)}")
 
