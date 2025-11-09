@@ -353,10 +353,120 @@ const PatientDetailsPage = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="docs">
-              <Card className="p-8 text-center border border-gray-200">
-                <p className="text-gray-500">Document details will be displayed here</p>
-              </Card>
+            <TabsContent value="docs" className="space-y-6">
+              {/* Medical Records Section */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Medical Records</h3>
+                  <button className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium">
+                    Upload Record
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {[
+                    { id: 1, name: 'Blood Test Results - Oct 2024', date: '2024-10-15', type: 'Lab Report', status: 'Ingested', size: '2.3 MB' },
+                    { id: 2, name: 'X-Ray Chest - Sep 2024', date: '2024-09-28', type: 'Imaging', status: 'Ingested', size: '5.1 MB' },
+                    { id: 3, name: 'Medical History Summary', date: '2024-09-25', type: 'Summary', status: 'Not Ingested', size: '1.8 MB' },
+                  ].map((record) => (
+                    <Card key={record.id} className="p-4 border border-gray-200 hover:shadow-md transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <FileText className="w-6 h-6 text-purple-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-900">{record.name}</h4>
+                            <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                              <span>{record.type}</span>
+                              <span>•</span>
+                              <span>{record.date}</span>
+                              <span>•</span>
+                              <span>{record.size}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            record.status === 'Ingested' 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {record.status}
+                          </span>
+                          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                            <FileText className="w-4 h-4 text-gray-600" />
+                          </button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+
+              {/* Forms Section */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Consent Forms</h3>
+                  <button 
+                    onClick={() => setShowSendFormsModal(true)}
+                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Send Forms
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {[
+                    { id: 1, name: 'Insurance Information Release', sentDate: '2024-10-10', status: 'Signed', signedDate: '2024-10-12' },
+                    { id: 2, name: 'Medical Records Request - Lab', sentDate: '2024-10-05', status: 'Sent', signedDate: null },
+                    { id: 3, name: 'HIPAA Authorization Form', sentDate: null, status: 'To-Do', signedDate: null },
+                    { id: 4, name: 'Consent for Treatment', sentDate: '2024-09-20', status: 'Signed', signedDate: '2024-09-22' },
+                  ].map((form) => (
+                    <Card key={form.id} className="p-4 border border-gray-200 hover:shadow-md transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                            form.status === 'Signed' ? 'bg-green-100' :
+                            form.status === 'Sent' ? 'bg-blue-100' :
+                            'bg-gray-100'
+                          }`}>
+                            {form.status === 'Signed' ? (
+                              <CheckCircle className="w-6 h-6 text-green-600" />
+                            ) : form.status === 'Sent' ? (
+                              <Send className="w-6 h-6 text-blue-600" />
+                            ) : (
+                              <AlertCircle className="w-6 h-6 text-gray-600" />
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-900">{form.name}</h4>
+                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                              {form.status === 'Signed' && form.signedDate && (
+                                <span>Signed on {form.signedDate}</span>
+                              )}
+                              {form.status === 'Sent' && form.sentDate && (
+                                <span>Sent on {form.sentDate}</span>
+                              )}
+                              {form.status === 'To-Do' && (
+                                <span>Not yet sent</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          form.status === 'Signed' ? 'bg-green-100 text-green-700' :
+                          form.status === 'Sent' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {form.status}
+                        </span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
