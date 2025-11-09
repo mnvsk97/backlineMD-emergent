@@ -36,6 +36,42 @@ export async function OPTIONS(req) {
   });
 }
 
+// Handle GET requests
+export async function GET(req) {
+  try {
+    const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+      runtime, 
+      serviceAdapter,
+      endpoint: "/api/copilotkit",
+    });
+
+    const response = await handleRequest(req);
+    
+    const headers = new Headers(response.headers);
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      headers.set(key, value);
+    });
+    
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch (error) {
+    console.error("CopilotKit GET error:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 500,
+        headers: { 
+          "Content-Type": "application/json",
+          ...corsHeaders
+        }
+      }
+    );
+  }
+}
+
 // 3. Build a Next.js API route that handles the CopilotKit runtime requests.
 export const POST = async (req) => {
   try {
