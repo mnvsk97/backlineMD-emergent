@@ -121,8 +121,22 @@ const PatientDetailsPage = () => {
 
   const aiSummary = `${patient.age || 34}-year-old ${(patient.gender || 'Male').toLowerCase()} patient with documented family history of heart disease and elevated cholesterol levels. Currently under ${patient.status.toLowerCase()}. Initial consultation completed with comprehensive medical history review. Patient demonstrates good understanding of treatment options and shows commitment to lifestyle modifications including Mediterranean diet and regular exercise regimen. Recent vitals show stable condition with BP 125/80 and HR 68 bpm. Recommended follow-up in 4-6 weeks to assess progress and adjust treatment plan as needed.`;
 
+  // Available consent forms for sending
+  const availableForms = [
+    { id: 1, name: 'Insurance Information Release', description: 'Authorization to release medical information to insurance provider', purpose: 'Insurance verification' },
+    { id: 2, name: 'Medical Records Request - Lab', description: 'Request medical records from external laboratory', purpose: 'Lab data collection' },
+    { id: 3, name: 'HIPAA Authorization Form', description: 'HIPAA compliant authorization for information disclosure', purpose: 'Legal compliance' },
+    { id: 4, name: 'Consent for Treatment', description: 'Patient consent for proposed treatment plan', purpose: 'Treatment authorization' },
+  ];
+
   return (
     <div className="flex-1 h-screen overflow-hidden flex flex-col">
+      <SendFormsModal
+        isOpen={showSendFormsModal}
+        onClose={() => setShowSendFormsModal(false)}
+        patientEmail={patient?.email}
+        availableForms={availableForms}
+      />
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-8 py-6">
           <button onClick={() => navigate('/patients')} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4">
