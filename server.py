@@ -932,7 +932,7 @@ async def get_dashboard_appointments():
 # ==================== COPILOT ENDPOINT ====================
 
 
-@app.post("/api/copilotkit")
+@app.post("/api/copilot")
 async def copilotkit_proxy(request: Request):
     """Proxy CopilotKit requests to LangGraph server"""
     import httpx
