@@ -27,8 +27,8 @@ from logger import (
 )
 from models import *
 
-# Composio email integration
-from composio_integration import send_patient_notification_email, send_email_via_composio
+# Composio email integration (temporarily disabled due to import issues)
+# from composio_integration import send_patient_notification_email, send_email_via_composio
 
 
 # Initialize logger
